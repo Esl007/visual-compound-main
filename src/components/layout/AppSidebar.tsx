@@ -1,4 +1,6 @@
-import { Link, useLocation } from "react-router-dom";
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Sparkles,
@@ -14,11 +16,11 @@ import {
   Menu,
   Home,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 interface NavItem {
   label: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   path: string;
 }
 
@@ -42,16 +44,15 @@ const footerNav: NavItem[] = [
 ];
 
 export const AppSidebar = () => {
-  const location = useLocation();
+  const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
   const NavLink = ({ item }: { item: NavItem }) => {
-    const isActive = location.pathname === item.path || 
-      (item.path === "/" && location.pathname === "/");
+    const isActive = pathname === item.path || (item.path === "/" && pathname === "/");
 
     return (
       <Link
-        to={item.path}
+        href={item.path}
         className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative ${
           isActive
             ? "bg-primary/10 text-primary font-medium"
@@ -108,21 +109,27 @@ export const AppSidebar = () => {
       {/* Primary Navigation */}
       <nav className="flex-1 p-3 space-y-1">
         {primaryNav.map((item) => (
-          <NavLink key={item.path} item={item} />
+          <div key={item.path}>
+            <NavLink item={item} />
+          </div>
         ))}
 
         {/* Divider */}
         <div className="my-4 border-t border-sidebar-border" />
 
         {secondaryNav.map((item) => (
-          <NavLink key={item.path} item={item} />
+          <div key={item.path}>
+            <NavLink item={item} />
+          </div>
         ))}
       </nav>
 
       {/* Footer Navigation */}
       <div className="p-3 border-t border-sidebar-border space-y-1">
         {footerNav.map((item) => (
-          <NavLink key={item.path} item={item} />
+          <div key={item.path}>
+            <NavLink item={item} />
+          </div>
         ))}
       </div>
     </motion.aside>

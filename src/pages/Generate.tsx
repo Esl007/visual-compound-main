@@ -1,5 +1,6 @@
+"use client";
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
@@ -20,8 +21,10 @@ const tabs = [
 ];
 
 export const Generate = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "prompt");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState((searchParams?.get("tab") as string | null) || "prompt");
   const [prompt, setPrompt] = useState("");
   const [enhancePrompt, setEnhancePrompt] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -29,7 +32,7 @@ export const Generate = () => {
   const [keepBackground, setKeepBackground] = useState(true);
 
   useEffect(() => {
-    const tab = searchParams.get("tab");
+    const tab = searchParams?.get("tab");
     if (tab && (tab === "prompt" || tab === "product")) {
       setActiveTab(tab);
     }
@@ -37,7 +40,9 @@ export const Generate = () => {
 
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
-    setSearchParams({ tab: tabId });
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    params.set("tab", tabId);
+    router.replace(`${pathname}?${params.toString()}`);
     setGeneratedImage(false);
   };
 

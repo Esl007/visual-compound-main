@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { Sparkles, ImagePlus, ArrowRight, Clock, Layers } from "lucide-react";
 
@@ -50,7 +50,7 @@ export const Dashboard = () => {
         {/* Primary CTAs */}
         <motion.div variants={item} className="grid md:grid-cols-2 gap-6">
           {/* Generate from Prompt */}
-          <Link to="/generate?tab=prompt" className="group">
+          <Link href="/generate?tab=prompt" className="group">
             <div className="card-interactive p-8 h-full bg-gradient-to-br from-primary/5 to-transparent">
               <div className="flex items-start justify-between mb-6">
                 <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
@@ -68,7 +68,7 @@ export const Dashboard = () => {
           </Link>
 
           {/* Enhance Product Photo */}
-          <Link to="/generate?tab=product" className="group">
+          <Link href="/generate?tab=product" className="group">
             <div className="card-interactive p-8 h-full bg-gradient-to-br from-accent/5 to-transparent">
               <div className="flex items-start justify-between mb-6">
                 <div className="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center group-hover:bg-accent/20 transition-colors">
@@ -95,7 +95,7 @@ export const Dashboard = () => {
                 <Clock className="w-5 h-5 text-muted-foreground" />
                 Recently Generated
               </h3>
-              <Link to="/products" className="text-sm text-primary hover:underline">
+              <Link href="/products" className="text-sm text-primary hover:underline">
                 View all
               </Link>
             </div>
@@ -122,7 +122,7 @@ export const Dashboard = () => {
                 <Layers className="w-5 h-5 text-muted-foreground" />
                 Your Products
               </h3>
-              <Link to="/products" className="text-sm text-primary hover:underline">
+              <Link href="/products" className="text-sm text-primary hover:underline">
                 View all
               </Link>
             </div>
