@@ -1,0 +1,158 @@
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { LayoutTemplate, Star, Check } from "lucide-react";
+
+interface Template {
+  id: number;
+  name: string;
+  category: string;
+  popular?: boolean;
+}
+
+const categories = ["All", "Hero Shots", "Lifestyle", "Marketplace", "Ads", "Social"];
+
+const templates: Template[] = [
+  { id: 1, name: "Clean Studio", category: "Hero Shots", popular: true },
+  { id: 2, name: "Marble Surface", category: "Hero Shots" },
+  { id: 3, name: "Natural Light", category: "Lifestyle", popular: true },
+  { id: 4, name: "Office Desk", category: "Lifestyle" },
+  { id: 5, name: "Kitchen Counter", category: "Lifestyle" },
+  { id: 6, name: "Amazon Standard", category: "Marketplace", popular: true },
+  { id: 7, name: "Etsy Aesthetic", category: "Marketplace" },
+  { id: 8, name: "eBay Clean", category: "Marketplace" },
+  { id: 9, name: "Instagram Story", category: "Social", popular: true },
+  { id: 10, name: "Facebook Feed", category: "Social" },
+  { id: 11, name: "Banner Ad", category: "Ads" },
+  { id: 12, name: "Square Ad", category: "Ads", popular: true },
+];
+
+const container = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.04 },
+  },
+};
+
+const item = {
+  hidden: { opacity: 0, scale: 0.95 },
+  show: { opacity: 1, scale: 1 },
+};
+
+export const Templates = () => {
+  const [activeCategory, setActiveCategory] = useState("All");
+  const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
+
+  const filteredTemplates = activeCategory === "All" 
+    ? templates 
+    : templates.filter(t => t.category === activeCategory);
+
+  return (
+    <div className="min-h-screen p-8 lg:p-12">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-6xl mx-auto space-y-8"
+      >
+        {/* Header */}
+        <div className="space-y-2">
+          <h1 className="text-3xl lg:text-4xl font-display font-semibold text-foreground">
+            Templates
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Choose how your product is presented
+          </p>
+        </div>
+
+        {/* Categories */}
+        <div className="flex flex-wrap gap-2">
+          {categories.map((category) => (
+            <button
+              key={category}
+              onClick={() => setActiveCategory(category)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                activeCategory === category
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              }`}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+
+        {/* Templates Grid */}
+        <motion.div
+          variants={container}
+          initial="hidden"
+          animate="show"
+          key={activeCategory}
+          className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
+        >
+          {filteredTemplates.map((template) => (
+            <motion.div
+              key={template.id}
+              variants={item}
+              onClick={() => setSelectedTemplate(template.id)}
+              className={`card-interactive cursor-pointer relative overflow-hidden group ${
+                selectedTemplate === template.id ? "ring-2 ring-primary" : ""
+              }`}
+            >
+              {/* Preview */}
+              <div className="aspect-[4/3] bg-muted relative overflow-hidden">
+                <div className="w-full h-full bg-gradient-to-br from-primary/5 via-secondary to-accent/10 group-hover:scale-105 transition-transform duration-500" />
+                
+                {/* Popular Badge */}
+                {template.popular && (
+                  <div className="absolute top-3 left-3 bg-accent text-accent-foreground px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1">
+                    <Star className="w-3 h-3" />
+                    Popular
+                  </div>
+                )}
+
+                {/* Selected Indicator */}
+                {selectedTemplate === template.id && (
+                  <div className="absolute top-3 right-3 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
+                    <Check className="w-4 h-4 text-primary-foreground" />
+                  </div>
+                )}
+
+                {/* Hover Overlay */}
+                <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/5 transition-colors duration-300 flex items-center justify-center">
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <button className="btn-primary text-sm px-4 py-2">
+                      Use Template
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Info */}
+              <div className="p-4">
+                <h3 className="font-medium text-foreground">{template.name}</h3>
+                <p className="text-sm text-muted-foreground">{template.category}</p>
+              </div>
+            </motion.div>
+          ))}
+        </motion.div>
+
+        {/* Empty State */}
+        {filteredTemplates.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-16"
+          >
+            <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center">
+              <LayoutTemplate className="w-10 h-10 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-medium text-foreground mb-1">No templates in this category</h3>
+            <p className="text-muted-foreground">Check back soon for new templates</p>
+          </motion.div>
+        )}
+      </motion.div>
+    </div>
+  );
+};
+
+export default Templates;
