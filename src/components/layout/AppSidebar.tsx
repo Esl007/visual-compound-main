@@ -61,7 +61,7 @@ export const AppSidebar = () => {
         {isActive && (
           <motion.div
             layoutId="activeIndicator"
-            className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"
+            className="absolute left-0 inset-y-1 w-1 bg-primary rounded-r-full pointer-events-none z-10"
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
           />
         )}
