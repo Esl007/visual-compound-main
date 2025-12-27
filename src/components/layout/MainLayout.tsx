@@ -1,7 +1,8 @@
 import { AppSidebar } from "./AppSidebar";
+import type { ReactNode } from "react";
 
 interface MainLayoutProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export const MainLayout = ({ children }: MainLayoutProps) => {
