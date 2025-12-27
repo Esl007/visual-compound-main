@@ -29,6 +29,8 @@ export const Generate = () => {
   const [enhancePrompt, setEnhancePrompt] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState(false);
+  const [resultDataUrl, setResultDataUrl] = useState<string | null>(null);
+  const [resultUploadedUrl, setResultUploadedUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -113,7 +115,33 @@ export const Generate = () => {
           }
         }
       }
-      // Simulate image result after processing
+
+      // Generate image via API
+      const genRes = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prompt: activeTab === "prompt" ? prompt : sceneDescription || prompt,
+          productImageUrl: activeTab === "product" ? uploadedImageUrl : undefined,
+          keepBackground,
+        }),
+      });
+      if (!genRes.ok) throw new Error("Failed to generate image");
+      const gen = await genRes.json();
+      const mimeType: string = gen?.mimeType || "image/png";
+      const b64: string | undefined = gen?.imageBase64;
+      if (!b64) throw new Error("No image data returned");
+      const dataUrl = `data:${mimeType};base64,${b64}`;
+      setResultDataUrl(dataUrl);
+
+      // Upload generated image to storage
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], `generated-${Date.now()}.png`, { type: mimeType });
+      const { uploadUrl, fileUrl } = await requestPresign(file);
+      const put = await fetch(uploadUrl, { method: "PUT", headers: { "content-type": mimeType }, body: file });
+      if (!put.ok) throw new Error("Failed to upload generated image");
+      setResultUploadedUrl(fileUrl);
+
       setGeneratedImage(true);
     } finally {
       setIsGenerating(false);
@@ -339,14 +367,22 @@ export const Generate = () => {
                     className="w-full space-y-4"
                   >
                     {/* Generated Image */}
-                    <div className="aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-primary/20 via-accent/20 to-primary/10 flex items-center justify-center">
-                      <div className="text-center p-8">
-                        <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-primary/20 flex items-center justify-center">
-                          <Check className="w-10 h-10 text-primary" />
+                    <div className="aspect-square rounded-xl overflow-hidden bg-muted flex items-center justify-center">
+                      {resultUploadedUrl || resultDataUrl ? (
+                        <img
+                          src={resultUploadedUrl || resultDataUrl || ""}
+                          alt="Generated"
+                          className="object-contain w-full h-full"
+                        />
+                      ) : (
+                        <div className="text-center p-8">
+                          <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-primary/20 flex items-center justify-center">
+                            <Check className="w-10 h-10 text-primary" />
+                          </div>
+                          <p className="text-foreground font-medium">Image Generated!</p>
+                          <p className="text-sm text-muted-foreground">Your visual is ready</p>
                         </div>
-                        <p className="text-foreground font-medium">Image Generated!</p>
-                        <p className="text-sm text-muted-foreground">Your visual is ready</p>
-                      </div>
+                      )}
                     </div>
 
                     {/* Actions */}
