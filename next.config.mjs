@@ -1,7 +1,6 @@
 const nextConfig = {
-  // Only treat files with these extensions as legacy Pages Router routes.
-  // Prevents Next from treating files in src/pages/*.tsx as routes.
-  pageExtensions: ["page.tsx", "page.ts", "api.ts", "api.tsx"],
+  // Use standard extensions so App Router files like layout.tsx/page.tsx are recognized.
+  pageExtensions: ["tsx", "ts", "jsx", "js"],
 };
 
 export default nextConfig;
