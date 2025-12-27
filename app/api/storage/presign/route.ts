@@ -1,10 +1,21 @@
 import { NextRequest } from "next/server";
+export const runtime = "nodejs";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+function cleanEnv(v?: string) {
+  if (!v) return v;
+  let out = v.trim();
+  if ((out.startsWith('"') && out.endsWith('"')) || (out.startsWith("'") && out.endsWith("'"))) {
+    out = out.slice(1, -1);
+  }
+  return out;
+}
+
 function required(name: string, v?: string) {
-  if (!v) throw new Error(`Missing env ${name}`);
-  return v;
+  const cleaned = cleanEnv(v);
+  if (!cleaned) throw new Error(`Missing env ${name}`);
+  return cleaned;
 }
 
 export async function POST(req: NextRequest) {
@@ -19,7 +30,7 @@ export async function POST(req: NextRequest) {
     const accessKeyId = required("S3_ACCESS_KEY_ID", process.env.S3_ACCESS_KEY_ID);
     const secretAccessKey = required("S3_SECRET_ACCESS_KEY", process.env.S3_SECRET_ACCESS_KEY);
     const endpoint = required("S3_ENDPOINT", process.env.S3_ENDPOINT);
-    const forcePathStyle = (process.env.S3_FORCE_PATH_STYLE || "true").toLowerCase() === "true";
+    const forcePathStyle = cleanEnv(process.env.S3_FORCE_PATH_STYLE)?.toLowerCase() !== "false";
 
     const s3 = new S3Client({
       region,
@@ -40,12 +51,22 @@ export async function POST(req: NextRequest) {
 
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 60 * 5 });
 
+    // Compute file URL robustly without URL parsing to tolerate minor formatting
+    const normalizedEndpoint = endpoint.replace(/\/$/, "");
     let fileUrl: string;
-    const u = new URL(endpoint);
     if (forcePathStyle) {
-      fileUrl = `${u.origin}/${bucket}/${key}`;
+      fileUrl = `${normalizedEndpoint}/${bucket}/${key}`;
     } else {
-      fileUrl = `${u.protocol}//${bucket}.${u.host}/${key}`;
+      // Best-effort: insert bucket as subdomain
+      const m = normalizedEndpoint.match(/^(https?:)\/\/([^/]+)(.*)$/);
+      if (m) {
+        const proto = m[1];
+        const host = m[2];
+        const rest = m[3] || "";
+        fileUrl = `${proto}//${bucket}.${host}${rest}/${key}`;
+      } else {
+        fileUrl = `${normalizedEndpoint}/${bucket}/${key}`;
+      }
     }
 
     return new Response(
@@ -53,8 +74,10 @@ export async function POST(req: NextRequest) {
       { status: 200, headers: { "content-type": "application/json" } },
     );
   } catch (e: any) {
+    const endpoint = cleanEnv(process.env.S3_ENDPOINT);
+    const bucket = cleanEnv(process.env.S3_BUCKET);
     return new Response(
-      JSON.stringify({ error: e?.message || "Unknown error" }),
+      JSON.stringify({ error: e?.message || "Unknown error", details: { endpoint, bucket } }),
       { status: 500, headers: { "content-type": "application/json" } },
     );
   }

@@ -1,4 +1,6 @@
 import { NextRequest } from "next/server";
+export const runtime = "nodejs";
+export const maxDuration = 60;
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req: NextRequest) {
@@ -22,6 +24,9 @@ export async function POST(req: NextRequest) {
       headers: { "content-type": "application/json" },
     });
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: e?.message || "Unknown error" }), { status: 500 });
+    return new Response(
+      JSON.stringify({ error: e?.message || "Unknown error" }),
+      { status: 500, headers: { "content-type": "application/json" } }
+    );
   }
 }
