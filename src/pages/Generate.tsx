@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -29,7 +29,11 @@ export const Generate = () => {
   const [enhancePrompt, setEnhancePrompt] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [keepBackground, setKeepBackground] = useState(true);
+  const [sceneDescription, setSceneDescription] = useState("");
 
   useEffect(() => {
     const tab = searchParams?.get("tab");
@@ -46,12 +50,74 @@ export const Generate = () => {
     setGeneratedImage(false);
   };
 
-  const handleGenerate = () => {
+  const requestPresign = async (file: File) => {
+    const res = await fetch("/api/storage/presign", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ contentType: file.type, fileName: file.name }),
+    });
+    if (!res.ok) throw new Error("Failed to get upload URL");
+    return (await res.json()) as { uploadUrl: string; fileUrl: string };
+  };
+
+  const handleFileSelected = async (file?: File) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { uploadUrl, fileUrl } = await requestPresign(file);
+      const put = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "content-type": file.type },
+        body: file,
+      });
+      if (!put.ok) throw new Error("Upload failed");
+      setUploadedImageUrl(fileUrl);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleGenerate = async () => {
     setIsGenerating(true);
-    setTimeout(() => {
-      setIsGenerating(false);
+    try {
+      if (activeTab === "prompt") {
+        // Optionally enhance prompt via Google AI route
+        if (enhancePrompt && prompt.trim()) {
+          const r = await fetch("/api/google", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ prompt }),
+          });
+          if (r.ok) {
+            const j = await r.json();
+            if (j?.text) setPrompt(j.text);
+          }
+        }
+      } else if (activeTab === "product") {
+        // Ensure an image is uploaded; optionally generate caption via Google API
+        if (!uploadedImageUrl) {
+          setIsGenerating(false);
+          return;
+        }
+        if (sceneDescription.trim()) {
+          const r = await fetch("/api/google", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ prompt: sceneDescription }),
+          });
+          if (r.ok) {
+            const j = await r.json();
+            if (j?.text) setSceneDescription(j.text);
+          }
+        }
+      }
+      // Simulate image result after processing
       setGeneratedImage(true);
-    }, 2000);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -157,17 +223,41 @@ export const Generate = () => {
                     <label className="text-sm font-medium text-foreground">
                       Upload your product photo
                     </label>
-                    <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer group">
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const f = e.dataTransfer.files?.[0];
+                        if (f) void handleFileSelected(f);
+                      }}
+                      className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer group"
+                    >
                       <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center group-hover:bg-primary/10 transition-colors">
                         <Upload className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
                       </div>
                       <p className="text-foreground font-medium mb-1">
-                        Drop your image here
+                        {uploading ? "Uploading..." : uploadedImageUrl ? "Image selected" : "Drop your image here"}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         or click to browse
                       </p>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => void handleFileSelected(e.target.files?.[0] || undefined)}
+                      />
                     </div>
+
+                    {uploadedImageUrl && (
+                      <div className="mt-3">
+                        <img src={uploadedImageUrl} alt="Uploaded" className="rounded-lg max-h-48 mx-auto" />
+                      </div>
+                    )}
                   </div>
 
                   {/* Scene Description */}
@@ -177,6 +267,8 @@ export const Generate = () => {
                     </label>
                     <input
                       type="text"
+                      value={sceneDescription}
+                      onChange={(e) => setSceneDescription(e.target.value)}
                       placeholder="e.g., On a wooden desk with plants"
                       className="input-field"
                     />
