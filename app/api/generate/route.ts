@@ -139,6 +139,7 @@ export async function POST(req: NextRequest) {
           "x-goog-api-key": GOOGLE_API_KEY,
         },
         body: JSON.stringify({
+          model: "gemini-2.5-flash-image",
           contents: [
             {
               role: "user",
@@ -171,6 +172,21 @@ export async function POST(req: NextRequest) {
           }
         }
       }
+      // Surface any text returned for debugging
+      let textSnippet = "";
+      for (const c of candidates) {
+        const parts = (c?.content?.parts || []) as any[];
+        for (const p of parts) {
+          if (typeof p?.text === "string" && p.text) {
+            textSnippet = p.text.slice(0, 300);
+            break;
+          }
+        }
+        if (textSnippet) break;
+      }
+      if (textSnippet) {
+        throw new Error(`No image content returned by REST endpoint; text snippet: ${textSnippet}`);
+      }
       throw new Error("No image content returned by REST endpoint");
     };
 
@@ -191,7 +207,7 @@ export async function POST(req: NextRequest) {
             model: modelId,
             // Common shapes used across Google samples; include both for compatibility
             prompt: { text: promptText },
-            imageGenerationConfig: { aspectRatio: ar },
+            imageGenerationConfig: { aspectRatio: ar, numberOfImages: 1, outputMimeType: "image/png" },
             aspect: ar,
           }),
         } as RequestInit);
@@ -223,6 +239,25 @@ export async function POST(req: NextRequest) {
             }
           }
         }
+        // Surface any prompt feedback or returned text for debugging
+        let textSnippet = "";
+        for (const c of candidates) {
+          const parts = (c?.content?.parts || []) as any[];
+          for (const p of parts) {
+            if (typeof p?.text === "string" && p.text) {
+              textSnippet = p.text.slice(0, 300);
+              break;
+            }
+          }
+          if (textSnippet) break;
+        }
+        const pf = (j as any)?.promptFeedback || (j as any)?.safetyFeedback;
+        const pfSnippet = pf ? JSON.stringify(pf).slice(0, 300) : "";
+        if (textSnippet || pfSnippet) {
+          throw new Error(
+            `images:generate response contained no image data; text snippet: ${textSnippet || "<none>"}; feedback: ${pfSnippet || "<none>"}`,
+          );
+        }
         throw new Error("images:generate response contained no image data");
       };
 
@@ -234,44 +269,89 @@ export async function POST(req: NextRequest) {
       }
     };
 
-    try {
-      // Prefer direct images:generate to force image output
-      const out = await tryGenerateImagesApi();
-      return new Response(JSON.stringify(out), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    } catch (e1: any) {
+    const hasGuidance = Boolean(productImageDataUrl || productImageUrl);
+    if (hasGuidance) {
       try {
-        // Next: REST generateContent with aspect
-        const out2 = await tryGenerateRest();
-        return new Response(JSON.stringify(out2), {
+        // Guided: use generateContent REST so we can inline the product image
+        const out = await tryGenerateRest();
+        return new Response(JSON.stringify(out), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
-      } catch (e2: any) {
+      } catch (e1: any) {
         try {
-          // Last resort: SDK
-          const out3 = await tryGenerate("gemini-2.5-flash-image");
-          return new Response(JSON.stringify(out3), {
+          // Fallback to images:generate (prompt-only)
+          const out2 = await tryGenerateImagesApi();
+          return new Response(JSON.stringify(out2), {
             status: 200,
             headers: { "content-type": "application/json" },
           });
-        } catch (e3: any) {
-          const key = cleanEnv(process.env.GOOGLE_API_KEY) || "";
-          const keyPrefix = key ? key.slice(0, 6) : "";
-          return new Response(
-            JSON.stringify({
-              error: "Google AI image generation failed",
-              detail: e3?.message || e2?.message || e1?.message,
-              model: "gemini-2.5-flash-image",
-              env: {
-                googleApiKeyPrefix: keyPrefix,
-                hasKey: Boolean(key),
-              },
-            }),
-            { status: 500 },
-          );
+        } catch (e2: any) {
+          try {
+            // Last resort: SDK
+            const out3 = await tryGenerate("gemini-2.5-flash-image");
+            return new Response(JSON.stringify(out3), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+          } catch (e3: any) {
+            const key = cleanEnv(process.env.GOOGLE_API_KEY) || "";
+            const keyPrefix = key ? key.slice(0, 6) : "";
+            return new Response(
+              JSON.stringify({
+                error: "Google AI image generation failed",
+                detail: e3?.message || e2?.message || e1?.message,
+                model: "gemini-2.5-flash-image",
+                env: {
+                  googleApiKeyPrefix: keyPrefix,
+                  hasKey: Boolean(key),
+                },
+              }),
+              { status: 500 },
+            );
+          }
+        }
+      }
+    } else {
+      try {
+        // Prompt-only: prefer direct images:generate to force image output
+        const out = await tryGenerateImagesApi();
+        return new Response(JSON.stringify(out), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      } catch (e1: any) {
+        try {
+          // Next: REST generateContent with aspect
+          const out2 = await tryGenerateRest();
+          return new Response(JSON.stringify(out2), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        } catch (e2: any) {
+          try {
+            // Last resort: SDK
+            const out3 = await tryGenerate("gemini-2.5-flash-image");
+            return new Response(JSON.stringify(out3), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+          } catch (e3: any) {
+            const key = cleanEnv(process.env.GOOGLE_API_KEY) || "";
+            const keyPrefix = key ? key.slice(0, 6) : "";
+            return new Response(
+              JSON.stringify({
+                error: "Google AI image generation failed",
+                detail: e3?.message || e2?.message || e1?.message,
+                model: "gemini-2.5-flash-image",
+                env: {
+                  googleApiKeyPrefix: keyPrefix,
+                  hasKey: Boolean(key),
+                },
+              }),
+              { status: 500 },
+            );
+          }
         }
       }
     }
