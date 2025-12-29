@@ -99,6 +99,80 @@ export async function POST(req: NextRequest) {
       throw new Error("No image content returned by Google AI");
     };
 
+    const tryGenerateRest = async () => {
+      let imgPart: any = null;
+      if (productImageDataUrl || productImageUrl) {
+        const source = productImageDataUrl || productImageUrl!;
+        if (source.startsWith("data:")) {
+          const idx = source.indexOf(",");
+          const meta = source.slice(5, idx);
+          const data = source.slice(idx + 1);
+          const mime = (meta.split(";")[0] || "image/png") as string;
+          imgPart = { inlineData: { mimeType: mime, data } };
+        } else {
+          const refRes = await fetch(source, {
+            method: "GET",
+            headers: {
+              "user-agent": "Mozilla/5.0 (compatible; VercelRuntime/1.0)",
+              accept: "image/*,*/*;q=0.8",
+            },
+            redirect: "follow",
+            cache: "no-store",
+          } as RequestInit);
+          if (!refRes.ok) {
+            const status = refRes.status;
+            const ct = refRes.headers.get("content-type");
+            throw new Error(`Failed to fetch product image: HTTP ${status} ct=${ct || "unknown"}`);
+          }
+          const mime = refRes.headers.get("content-type") || "image/png";
+          const buf = Buffer.from(await refRes.arrayBuffer());
+          imgPart = { inlineData: { mimeType: mime, data: buf.toString("base64") } };
+        }
+      }
+      const arSet = new Set(["1:1", "16:9", "9:16"]);
+      const ar = arSet.has(aspectRatio || "") ? (aspectRatio as string) : "1:1";
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": GOOGLE_API_KEY,
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: `${prompt || "Product visual"}${keepBackground ? " (keep background consistent)" : ""}` },
+                ...(imgPart ? [imgPart] : []),
+              ],
+            },
+          ],
+          generationConfig: {
+            imageConfig: { aspectRatio: ar },
+          },
+        }),
+      } as RequestInit);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`REST generation failed: HTTP ${res.status} ${text}`);
+      }
+      const j = await res.json();
+      const candidates = (j as any)?.candidates || [];
+      for (const c of candidates) {
+        const parts = (c?.content?.parts || []) as any[];
+        for (const p of parts) {
+          if (p?.inlineData?.mimeType?.startsWith("image/")) {
+            return {
+              imageBase64: p.inlineData.data as string,
+              mimeType: p.inlineData.mimeType as string,
+            };
+          }
+        }
+      }
+      throw new Error("No image content returned by REST endpoint");
+    };
+
     try {
       const out = await tryGenerate("gemini-2.5-flash-image");
       return new Response(JSON.stringify(out), {
@@ -107,7 +181,7 @@ export async function POST(req: NextRequest) {
       });
     } catch (e1: any) {
       try {
-        const out2 = await tryGenerate("gemini-2.5-flash-image");
+        const out2 = await tryGenerateRest();
         return new Response(JSON.stringify(out2), {
           status: 200,
           headers: { "content-type": "application/json" },

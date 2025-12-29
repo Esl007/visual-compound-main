@@ -38,6 +38,7 @@ export const Generate = () => {
   const [keepBackground, setKeepBackground] = useState(true);
   const [sceneDescription, setSceneDescription] = useState("");
   const [aspectRatio, setAspectRatio] = useState<"1:1" | "16:9" | "9:16">("1:1");
+  const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
     const tab = searchParams?.get("tab");
@@ -93,6 +94,7 @@ export const Generate = () => {
 
   const handleGenerate = async () => {
     setIsGenerating(true);
+    setApiError(null);
     try {
       if (activeTab === "prompt") {
         // Optionally enhance prompt via Google AI route
@@ -138,7 +140,12 @@ export const Generate = () => {
           aspectRatio,
         }),
       });
-      if (!genRes.ok) throw new Error("Failed to generate image");
+      if (!genRes.ok) {
+        const errText = await genRes.text();
+        setApiError(errText);
+        setIsGenerating(false);
+        return;
+      }
       const gen = await genRes.json();
       const mimeType: string = gen?.mimeType || "image/png";
       const b64: string | undefined = gen?.imageBase64;
@@ -387,6 +394,11 @@ export const Generate = () => {
             transition={{ duration: 0.3, delay: 0.1 }}
             className="card-elevated p-6 flex flex-col"
           >
+            {apiError && (
+              <div className="mb-4 p-3 rounded-md border border-red-200 bg-red-50 text-red-700 text-sm break-words">
+                {apiError}
+              </div>
+            )}
             <div className="flex-1 flex items-center justify-center">
               <AnimatePresence mode="wait">
                 {generatedImage ? (
