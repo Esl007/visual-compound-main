@@ -3,6 +3,15 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+function cleanEnv(v?: string) {
+  if (!v) return v as any;
+  let out = v.trim();
+  if ((out.startsWith('"') && out.endsWith('"')) || (out.startsWith("'") && out.endsWith("'"))) {
+    out = out.slice(1, -1);
+  }
+  return out;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -12,14 +21,15 @@ export async function POST(req: NextRequest) {
     const aspectRatio: string | undefined = body?.aspectRatio;
     const imageSize: "1K" | "2K" | "4K" | undefined = body?.imageSize;
 
-    if (!process.env.GOOGLE_API_KEY) {
+    const GOOGLE_API_KEY = cleanEnv(process.env.GOOGLE_API_KEY);
+    if (!GOOGLE_API_KEY) {
       return new Response(JSON.stringify({ error: "Missing GOOGLE_API_KEY" }), { status: 500 });
     }
     if (!prompt && !productImageUrl) {
       return new Response(JSON.stringify({ error: "Provide prompt or productImageUrl" }), { status: 400 });
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
 
     // Try primary Imagen 3 model name
     const tryGenerate = async (modelName: string) => {
@@ -84,8 +94,18 @@ export async function POST(req: NextRequest) {
           headers: { "content-type": "application/json" },
         });
       } catch (e2: any) {
+        const key = cleanEnv(process.env.GOOGLE_API_KEY) || "";
+        const keyPrefix = key ? key.slice(0, 6) : "";
         return new Response(
-          JSON.stringify({ error: "Google AI image generation failed", detail: e2?.message || e1?.message }),
+          JSON.stringify({
+            error: "Google AI image generation failed",
+            detail: e2?.message || e1?.message,
+            model: "gemini-2.5-flash-image",
+            env: {
+              googleApiKeyPrefix: keyPrefix,
+              hasKey: Boolean(key),
+            },
+          }),
           { status: 500 },
         );
       }
