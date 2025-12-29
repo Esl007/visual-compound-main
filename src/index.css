@@ -203,15 +203,23 @@
   }
   input.range.range-theme::-webkit-slider-thumb {
     background-color: hsl(var(--primary));
+    border: 2px solid hsl(var(--primary));
+    box-shadow: none;
   }
   input.range.range-theme::-moz-range-thumb {
     background-color: hsl(var(--primary));
+    border: 2px solid hsl(var(--primary));
   }
   input.range.range-theme::-webkit-slider-runnable-track {
     background-color: hsl(var(--primary) / 0.18);
   }
   input.range.range-theme::-moz-range-track {
     background-color: hsl(var(--primary) / 0.18);
+  }
+  input.range.range-theme:focus::-webkit-slider-thumb,
+  input.range.range-theme:active::-webkit-slider-thumb {
+    background-color: hsl(var(--primary));
+    border-color: hsl(var(--primary));
   }
 }
 

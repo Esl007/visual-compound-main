@@ -410,7 +410,7 @@ export const Generate = () => {
                   step={1}
                   value={numImages}
                   onChange={(e) => setNumImages(Number(e.target.value))}
-                  className="range range-theme w-full focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/40"
+                  className="range range-primary range-theme w-full focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/40"
                 />
                 <div className="pointer-events-none absolute left-0 right-0 bottom-0 flex justify-between text-[10px] text-muted-foreground">
                   {[1,2,3,4,5,6].map((n) => (
