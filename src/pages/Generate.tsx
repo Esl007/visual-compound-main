@@ -30,6 +30,7 @@ export const Generate = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState(false);
   const [resultDataUrl, setResultDataUrl] = useState<string | null>(null);
+  const [resultDataUrls, setResultDataUrls] = useState<string[] | null>(null);
   const [resultUploadedUrl, setResultUploadedUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
@@ -38,9 +39,11 @@ export const Generate = () => {
   const [keepBackground, setKeepBackground] = useState(true);
   const [sceneDescription, setSceneDescription] = useState("");
   const [aspectRatio, setAspectRatio] = useState<"1:1" | "16:9" | "9:16">("1:1");
+  const [numImages, setNumImages] = useState<number>(1);
   const [apiError, setApiError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<any | null>(null);
   const outputRef = useRef<HTMLDivElement | null>(null);
+  const [zoomSrc, setZoomSrc] = useState<string | null>(null);
 
   useEffect(() => {
     const tab = searchParams?.get("tab");
@@ -98,6 +101,8 @@ export const Generate = () => {
     setIsGenerating(true);
     setApiError(null);
     setDebugInfo(null);
+    setResultDataUrls(null);
+    setResultUploadedUrl(null);
     try {
       if (activeTab === "prompt") {
         // Optionally enhance prompt via Google AI route
@@ -114,8 +119,9 @@ export const Generate = () => {
         }
       } else if (activeTab === "product") {
         // Ensure an image is uploaded; optionally generate caption via Google API
-        if (!uploadedImageUrl) {
+        if (!uploadedImageUrl && !uploadedImageDataUrl) {
           setIsGenerating(false);
+          setApiError("Please upload an image to generate variations.");
           return;
         }
         if (sceneDescription.trim()) {
@@ -141,6 +147,7 @@ export const Generate = () => {
           productImageDataUrl: activeTab === "product" ? uploadedImageDataUrl : undefined,
           keepBackground,
           aspectRatio,
+          numImages,
         }),
       });
       if (!genRes.ok) {
@@ -152,16 +159,29 @@ export const Generate = () => {
       const gen = await genRes.json();
       if (gen?.debug) setDebugInfo(gen.debug);
       const mimeType: string = gen?.mimeType || "image/png";
-      const b64: string | undefined = gen?.imageBase64;
-      if (!b64) throw new Error("No image data returned");
-      const dataUrl = `data:${mimeType};base64,${b64}`;
-      setResultDataUrl(dataUrl);
+      const imagesArr: Array<{ imageBase64?: string; mimeType?: string }> = Array.isArray(gen?.images)
+        ? gen.images
+        : gen?.imageBase64
+        ? [{ imageBase64: gen.imageBase64, mimeType }]
+        : [];
+      const dataUrls = imagesArr
+        .map((im) => {
+          const mt = im?.mimeType || mimeType;
+          const b64 = im?.imageBase64;
+          if (!b64) return null;
+          return `data:${mt};base64,${b64}`;
+        })
+        .filter(Boolean) as string[];
+      if (!dataUrls.length) throw new Error("No image data returned");
+      setResultDataUrls(dataUrls);
+      const firstDataUrl = dataUrls[0];
+      setResultDataUrl(firstDataUrl);
       setGeneratedImage(true);
       // Scroll generated output into view
       setTimeout(() => outputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
 
       // Upload generated image to storage
-      const blob = await (await fetch(dataUrl)).blob();
+      const blob = await (await fetch(firstDataUrl)).blob();
       const file = new File([blob], `generated-${Date.now()}.png`, { type: mimeType });
       const { uploadUrl, fileUrl } = await requestPresign(file);
       const put = await fetch(uploadUrl, { method: "PUT", headers: { "content-type": mimeType }, body: file });
@@ -291,7 +311,11 @@ export const Generate = () => {
                         <Upload className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
                       </div>
                       <p className="text-foreground font-medium mb-1">
-                        {uploading ? "Uploading..." : uploadedImageUrl ? "Image selected" : "Drop your image here"}
+                        {uploading
+                          ? "Uploading..."
+                          : uploadedImageUrl || uploadedImageDataUrl
+                          ? "Image selected"
+                          : "Drop your image here"}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         or click to browse
@@ -305,9 +329,9 @@ export const Generate = () => {
                       />
                     </div>
 
-                    {uploadedImageUrl && (
+                    {(uploadedImageUrl || uploadedImageDataUrl) && (
                       <div className="mt-3">
-                        <img src={uploadedImageUrl} alt="Uploaded" className="rounded-lg max-h-48 mx-auto" />
+                        <img src={uploadedImageUrl || uploadedImageDataUrl || ""} alt="Uploaded" className="rounded-lg max-h-48 mx-auto" />
                       </div>
                     )}
                   </div>
@@ -371,6 +395,28 @@ export const Generate = () => {
               </div>
             </div>
 
+            {/* Number of Images */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-foreground flex items-center justify-between">
+                <span>Number of images</span>
+                <span className="text-xs text-muted-foreground">{numImages}</span>
+              </label>
+              <input
+                type="range"
+                min={1}
+                max={6}
+                step={1}
+                value={numImages}
+                onChange={(e) => setNumImages(Number(e.target.value))}
+                className="range range-primary"
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground px-1">
+                {[1, 2, 3, 4, 5, 6].map((n) => (
+                  <span key={n}>{n}</span>
+                ))}
+              </div>
+            </div>
+
             {/* Generate Button */}
             <button
               onClick={handleGenerate}
@@ -415,21 +461,37 @@ export const Generate = () => {
                     exit={{ opacity: 0, scale: 0.95 }}
                     className="w-full space-y-4"
                   >
-                    {/* Generated Image */}
-                    <div className="rounded-xl overflow-hidden bg-muted flex items-center justify-center w-full h-[420px]">
-                      {resultUploadedUrl || resultDataUrl ? (
-                        <img
-                          src={resultUploadedUrl || resultDataUrl || ""}
-                          alt="Generated"
-                          className="object-contain w-full h-full"
-                        />
+                    <div className="w-full">
+                      {Array.isArray(resultDataUrls) && resultDataUrls.length > 0 ? (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                          {resultDataUrls.map((src, idx) => (
+                            <button
+                              type="button"
+                              key={idx}
+                              onClick={() => setZoomSrc(src)}
+                              className="rounded-xl overflow-hidden bg-muted h-44 md:h-52 flex items-center justify-center hover:shadow-md transition-shadow cursor-zoom-in"
+                            >
+                              <img src={src} alt={`Generated ${idx + 1}`} className="object-cover w-full h-full" />
+                            </button>
+                          ))}
+                        </div>
                       ) : (
-                        <div className="text-center p-8">
-                          <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-primary/20 flex items-center justify-center">
-                            <Check className="w-10 h-10 text-primary" />
-                          </div>
-                          <p className="text-foreground font-medium">Image Generated!</p>
-                          <p className="text-sm text-muted-foreground">Your visual is ready</p>
+                        <div className="rounded-xl overflow-hidden bg-muted flex items-center justify-center w-full h-[420px]">
+                          {resultUploadedUrl || resultDataUrl ? (
+                            <img
+                              src={resultUploadedUrl || resultDataUrl || ""}
+                              alt="Generated"
+                              className="object-contain w-full h-full"
+                            />
+                          ) : (
+                            <div className="text-center p-8">
+                              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-primary/20 flex items-center justify-center">
+                                <Check className="w-10 h-10 text-primary" />
+                              </div>
+                              <p className="text-foreground font-medium">Image Generated!</p>
+                              <p className="text-sm text-muted-foreground">Your visual is ready</p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -459,6 +521,7 @@ export const Generate = () => {
                           <div><span className="text-muted-foreground">Model:</span> {debugInfo.request?.model || "-"}</div>
                           <div><span className="text-muted-foreground">Aspect:</span> {debugInfo.request?.aspect || "-"}</div>
                           <div><span className="text-muted-foreground">Inline image:</span> {String(Boolean(debugInfo.request?.hasInlineImage))}</div>
+                          <div><span className="text-muted-foreground">numberOfImages:</span> {debugInfo.request?.numberOfImages ?? "-"}</div>
                           <div className="col-span-2 break-words"><span className="text-muted-foreground">Prompt preview:</span> {debugInfo.request?.promptPreview || "-"}</div>
                         </div>
                         <div className="font-medium mt-2">What was received</div>
@@ -466,6 +529,18 @@ export const Generate = () => {
                           <div><span className="text-muted-foreground">imagesCount:</span> {debugInfo.response?.imagesCount ?? "-"}</div>
                           <div><span className="text-muted-foreground">candidatesCount:</span> {debugInfo.response?.candidatesCount ?? "-"}</div>
                         </div>
+                      </div>
+                    )}
+                    {zoomSrc && (
+                      <div
+                        className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+                        onClick={() => setZoomSrc(null)}
+                      >
+                        <img
+                          src={zoomSrc}
+                          alt="Preview"
+                          className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-xl cursor-zoom-out"
+                        />
                       </div>
                     )}
                   </motion.div>

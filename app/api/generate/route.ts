@@ -21,6 +21,11 @@ export async function POST(req: NextRequest) {
     const keepBackground: boolean | undefined = body?.keepBackground;
     const aspectRatio: string | undefined = body?.aspectRatio;
     const imageSize: "1K" | "2K" | "4K" | undefined = body?.imageSize;
+    const numImages: number = (() => {
+      const n = Number(body?.numImages);
+      if (!Number.isFinite(n)) return 1;
+      return Math.max(1, Math.min(6, Math.floor(n)));
+    })();
 
     const GOOGLE_API_KEY = cleanEnv(process.env.GOOGLE_API_KEY);
     if (!GOOGLE_API_KEY) {
@@ -83,18 +88,18 @@ export async function POST(req: NextRequest) {
         } as any,
       });
 
-      // Walk candidates -> parts -> inlineData
       const candidates = (result as any)?.response?.candidates || [];
+      const images: Array<{ imageBase64: string; mimeType: string }> = [];
       for (const c of candidates) {
         const parts = (c?.content?.parts || []) as any[];
         for (const p of parts) {
           if (p?.inlineData?.mimeType?.startsWith("image/")) {
-            return {
-              imageBase64: p.inlineData.data as string,
-              mimeType: p.inlineData.mimeType as string,
-            };
+            images.push({ imageBase64: String(p.inlineData.data), mimeType: String(p.inlineData.mimeType) });
           }
         }
+      }
+      if (images.length > 0) {
+        return { images, imageBase64: images[0].imageBase64, mimeType: images[0].mimeType } as any;
       }
       throw new Error("No image content returned by Google AI");
     };
@@ -140,6 +145,7 @@ export async function POST(req: NextRequest) {
           promptPreview: (promptText || "").slice(0, 200),
           promptLength: (promptText || "").length,
           hasInlineImage: Boolean(imgPart),
+          numberOfImages: numImages,
         },
         response: {},
       };
@@ -174,17 +180,18 @@ export async function POST(req: NextRequest) {
       const j = await res.json();
       const candidates = (j as any)?.candidates || [];
       debug.response.candidatesCount = candidates.length;
+      const images: Array<{ imageBase64: string; mimeType: string }> = [];
       for (const c of candidates) {
         const parts = (c?.content?.parts || []) as any[];
         for (const p of parts) {
           if (p?.inlineData?.mimeType?.startsWith("image/")) {
-            return {
-              imageBase64: p.inlineData.data as string,
-              mimeType: p.inlineData.mimeType as string,
-              debug,
-            };
+            images.push({ imageBase64: String(p.inlineData.data), mimeType: String(p.inlineData.mimeType) });
           }
         }
+      }
+      debug.response.imagesCount = images.length;
+      if (images.length > 0) {
+        return { images, imageBase64: images[0].imageBase64, mimeType: images[0].mimeType, debug } as any;
       }
       // Surface any text returned for debugging
       let textSnippet = "";
@@ -219,6 +226,7 @@ export async function POST(req: NextRequest) {
             promptPreview: (promptText || "").slice(0, 200),
             promptLength: (promptText || "").length,
             hasInlineImage: false,
+            numberOfImages: numImages,
           },
           response: {},
         };
@@ -232,7 +240,7 @@ export async function POST(req: NextRequest) {
             model: modelId,
             // Common shapes used across Google samples; include both for compatibility
             prompt: { text: promptText },
-            imageGenerationConfig: { aspectRatio: ar, numberOfImages: 1, outputMimeType: "image/png" },
+            imageGenerationConfig: { aspectRatio: ar, numberOfImages: numImages, outputMimeType: "image/png" },
             aspect: ar,
           }),
         } as RequestInit);
@@ -241,16 +249,21 @@ export async function POST(req: NextRequest) {
           throw new Error(`images:generate failed: HTTP ${res.status} ${text}`);
         }
         const j = await res.json();
-        // Possible shapes: { images: [{ inlineData: { mimeType, data } } ...] }
         const imgs = (j as any)?.images || (j as any)?.generatedImages || [];
-        debug.response.imagesCount = Array.isArray(imgs) ? imgs.length : 0;
-        for (const im of imgs) {
-          const inline = im?.inlineData || im?.inline_data || im?.image || im;
-          const data = inline?.data || inline?.bytesBase64 || inline?.base64;
-          const mime = inline?.mimeType || inline?.mime || "image/png";
-          if (data && mime?.startsWith("image/")) {
-            return { imageBase64: String(data), mimeType: String(mime), debug };
+        const images: Array<{ imageBase64: string; mimeType: string }> = [];
+        if (Array.isArray(imgs)) {
+          for (const im of imgs) {
+            const inline = im?.inlineData || im?.inline_data || im?.image || im;
+            const data = inline?.data || inline?.bytesBase64 || inline?.base64;
+            const mime = inline?.mimeType || inline?.mime || "image/png";
+            if (data && String(mime).startsWith("image/")) {
+              images.push({ imageBase64: String(data), mimeType: String(mime) });
+            }
           }
+        }
+        debug.response.imagesCount = images.length;
+        if (images.length > 0) {
+          return { images, imageBase64: images[0].imageBase64, mimeType: images[0].mimeType, debug } as any;
         }
         // Fallback: check candidates form just in case
         const candidates = (j as any)?.candidates || [];
@@ -259,13 +272,12 @@ export async function POST(req: NextRequest) {
           const parts = (c?.content?.parts || []) as any[];
           for (const p of parts) {
             if (p?.inlineData?.mimeType?.startsWith("image/")) {
-              return {
-                imageBase64: p.inlineData.data as string,
-                mimeType: p.inlineData.mimeType as string,
-                debug,
-              };
+              images.push({ imageBase64: String(p.inlineData.data), mimeType: String(p.inlineData.mimeType) });
             }
           }
+        }
+        if (images.length > 0) {
+          return { images, imageBase64: images[0].imageBase64, mimeType: images[0].mimeType, debug } as any;
         }
         // Surface any prompt feedback or returned text for debugging
         let textSnippet = "";
@@ -301,8 +313,35 @@ export async function POST(req: NextRequest) {
     if (hasGuidance) {
       try {
         // Guided: use generateContent REST so we can inline the product image
-        const out = await tryGenerateRest();
-        return new Response(JSON.stringify(out), {
+        // If multiple images requested, call endpoint repeatedly and aggregate
+        const target = numImages;
+        const agg: Array<{ imageBase64: string; mimeType: string }> = [];
+        let dbg: any = null;
+        let attempts = 0;
+        while (agg.length < target && attempts < Math.max(target, 3)) {
+          const out = (await tryGenerateRest()) as any;
+          if (!dbg && out?.debug) dbg = out.debug;
+          const imgs: Array<{ imageBase64: string; mimeType: string }> = Array.isArray(out?.images)
+            ? out.images
+            : out?.imageBase64
+            ? [{ imageBase64: out.imageBase64, mimeType: out?.mimeType || "image/png" }]
+            : [];
+          for (const im of imgs) {
+            if (agg.length >= target) break;
+            agg.push(im);
+          }
+          attempts++;
+        }
+        if (dbg) {
+          dbg.response = { ...(dbg.response || {}), imagesCount: agg.length };
+        }
+        const payload: any = {
+          images: agg,
+          imageBase64: agg[0]?.imageBase64,
+          mimeType: agg[0]?.mimeType || "image/png",
+          debug: dbg,
+        };
+        return new Response(JSON.stringify(payload), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
@@ -331,6 +370,7 @@ export async function POST(req: NextRequest) {
                   promptPreview: (promptText || "").slice(0, 200),
                   promptLength: (promptText || "").length,
                   hasInlineImage: true,
+                  numberOfImages: numImages,
                 },
                 response: {},
               },
@@ -390,6 +430,7 @@ export async function POST(req: NextRequest) {
                   promptPreview: (promptText || "").slice(0, 200),
                   promptLength: (promptText || "").length,
                   hasInlineImage: false,
+                  numberOfImages: numImages,
                 },
                 response: {},
               },
