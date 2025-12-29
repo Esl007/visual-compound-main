@@ -260,7 +260,10 @@ export const Generate = () => {
                   </div>
 
                   {/* Enhance Toggle */}
-                  <label className="flex items-center justify-between p-4 bg-muted/50 rounded-lg cursor-pointer group">
+                  <label
+                    className="flex items-center justify-between p-4 bg-muted/50 rounded-lg cursor-pointer group"
+                    onClick={() => setEnhancePrompt(!enhancePrompt)}
+                  >
                     <div className="flex items-center gap-3">
                       <Wand2 className="w-5 h-5 text-primary" />
                       <div>
@@ -269,7 +272,6 @@ export const Generate = () => {
                       </div>
                     </div>
                     <div
-                      onClick={() => setEnhancePrompt(!enhancePrompt)}
                       className={`w-11 h-6 rounded-full transition-colors duration-200 relative ${
                         enhancePrompt ? "bg-primary" : "bg-border"
                       }`}
@@ -399,10 +401,7 @@ export const Generate = () => {
 
             {/* Number of Images */}
             <div className="space-y-3">
-              <label className="text-sm font-medium text-foreground flex items-center justify-between">
-                <span>Number of images</span>
-                <span className="text-xs text-muted-foreground">{numImages}</span>
-              </label>
+              <label className="text-sm font-medium text-foreground">Number of images</label>
               <div className="relative pb-5">
                 <input
                   type="range"
@@ -411,15 +410,12 @@ export const Generate = () => {
                   step={1}
                   value={numImages}
                   onChange={(e) => setNumImages(Number(e.target.value))}
-                  className="range w-full accent-[hsl(var(--primary))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/40"
+                  className="range range-theme w-full focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/40"
                 />
-                <div className="pointer-events-none absolute left-0 right-0 bottom-0 grid grid-cols-6 text-[10px] text-muted-foreground">
-                  <span className="text-left">1</span>
-                  <span className="text-center">2</span>
-                  <span className="text-center">3</span>
-                  <span className="text-center">4</span>
-                  <span className="text-center">5</span>
-                  <span className="text-right">6</span>
+                <div className="pointer-events-none absolute left-0 right-0 bottom-0 flex justify-between text-[10px] text-muted-foreground">
+                  {[1,2,3,4,5,6].map((n) => (
+                    <span key={n}>{n}</span>
+                  ))}
                 </div>
               </div>
             </div>

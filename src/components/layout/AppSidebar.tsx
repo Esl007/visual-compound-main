@@ -12,6 +12,7 @@ import {
   Settings,
   CreditCard,
   HelpCircle,
+  LogIn,
   ChevronLeft,
   Menu,
   Home,
@@ -41,6 +42,7 @@ const footerNav: NavItem[] = [
   { label: "Account", icon: <Settings className="w-5 h-5" />, path: "/account" },
   { label: "Billing", icon: <CreditCard className="w-5 h-5" />, path: "/billing" },
   { label: "Help", icon: <HelpCircle className="w-5 h-5" />, path: "/help" },
+  { label: "Sign In", icon: <LogIn className="w-5 h-5" />, path: "/sign-in" },
 ];
 
 export const AppSidebar = () => {
@@ -62,7 +64,7 @@ export const AppSidebar = () => {
         {isActive && (
           <motion.div
             layoutId="activeIndicator"
-            className="absolute right-0 inset-y-1 w-1 bg-primary rounded-l-full pointer-events-none z-10"
+            className="absolute left-0 inset-y-1 w-1 bg-primary rounded-r-full pointer-events-none z-10"
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
           />
         )}

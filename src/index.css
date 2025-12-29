@@ -195,6 +195,24 @@
   .sidebar-item-active {
     @apply sidebar-item bg-primary/10 text-primary font-medium;
   }
+
+  /* Themed slider styling */
+  .range-theme {
+    accent-color: hsl(var(--primary));
+    --range-shdw: hsl(var(--primary));
+  }
+  input.range.range-theme::-webkit-slider-thumb {
+    background-color: hsl(var(--primary));
+  }
+  input.range.range-theme::-moz-range-thumb {
+    background-color: hsl(var(--primary));
+  }
+  input.range.range-theme::-webkit-slider-runnable-track {
+    background-color: hsl(var(--primary) / 0.18);
+  }
+  input.range.range-theme::-moz-range-track {
+    background-color: hsl(var(--primary) / 0.18);
+  }
 }
 
 @layer utilities {
