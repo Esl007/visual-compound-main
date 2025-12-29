@@ -36,6 +36,7 @@ export const Generate = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [keepBackground, setKeepBackground] = useState(true);
   const [sceneDescription, setSceneDescription] = useState("");
+  const [aspectRatio, setAspectRatio] = useState<"1:1" | "16:9" | "9:16">("1:1");
 
   useEffect(() => {
     const tab = searchParams?.get("tab");
@@ -124,6 +125,7 @@ export const Generate = () => {
           prompt: activeTab === "prompt" ? prompt : sceneDescription || prompt,
           productImageUrl: activeTab === "product" ? uploadedImageUrl : undefined,
           keepBackground,
+          aspectRatio,
         }),
       });
       if (!genRes.ok) throw new Error("Failed to generate image");
@@ -327,6 +329,25 @@ export const Generate = () => {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* Aspect Ratio */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-foreground">Aspect ratio</label>
+              <div className="flex items-center gap-2">
+                {(["1:1", "16:9", "9:16"] as const).map((ar) => (
+                  <button
+                    key={ar}
+                    type="button"
+                    onClick={() => setAspectRatio(ar)}
+                    className={`px-3 py-2 rounded-md text-sm border transition-colors ${
+                      aspectRatio === ar ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"
+                    }`}
+                  >
+                    {ar}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Generate Button */}
             <button
