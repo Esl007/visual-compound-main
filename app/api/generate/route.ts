@@ -59,7 +59,6 @@ export async function POST(req: NextRequest) {
           },
         ],
         generationConfig: {
-          responseMimeType: "image/png",
           imageConfig: { aspectRatio: ar }
         } as any,
       });
