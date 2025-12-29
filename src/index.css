@@ -216,6 +216,15 @@
   input.range.range-theme::-moz-range-track {
     background-color: hsl(var(--primary) / 0.18);
   }
+  input.range.range-theme {
+    --min: 1;
+    --max: 6;
+    --val: 1;
+    --range-track: hsl(var(--primary) / 0.18);
+    --range-fill: hsl(var(--primary) / 0.60);
+    --p: calc((var(--val) - var(--min)) / (var(--max) - var(--min)) * 100%);
+    background: linear-gradient(var(--range-fill) 0 0) 0/var(--p) 100% no-repeat, var(--range-track);
+  }
   input.range.range-theme:focus::-webkit-slider-thumb,
   input.range.range-theme:active::-webkit-slider-thumb {
     background-color: hsl(var(--primary));

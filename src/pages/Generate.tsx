@@ -411,6 +411,14 @@ export const Generate = () => {
                   value={numImages}
                   onChange={(e) => setNumImages(Number(e.target.value))}
                   className="range range-primary range-theme w-full focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/40"
+                  style={{
+                    // @ts-ignore custom CSS props for tail fill math
+                    "--min": 1,
+                    // @ts-ignore
+                    "--max": 6,
+                    // @ts-ignore
+                    "--val": numImages,
+                  }}
                 />
                 <div className="pointer-events-none absolute left-0 right-0 bottom-0 flex justify-between text-[10px] text-muted-foreground">
                   {[1,2,3,4,5,6].map((n) => (
