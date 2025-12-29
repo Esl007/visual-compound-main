@@ -407,21 +407,60 @@ export async function POST(req: NextRequest) {
         });
       } catch (e1: any) {
         try {
-          // Next: REST generateContent with aspect
-          const out2 = await tryGenerateRest();
-          return new Response(JSON.stringify(out2), {
+          // Next: REST generateContent with aspect; aggregate to numImages if needed
+          const target = numImages;
+          const agg: Array<{ imageBase64: string; mimeType: string }> = [];
+          let dbg: any = null;
+          let attempts = 0;
+          while (agg.length < target && attempts < Math.max(target, 3)) {
+            const out2 = (await tryGenerateRest()) as any;
+            if (!dbg && out2?.debug) dbg = out2.debug;
+            const imgs: Array<{ imageBase64: string; mimeType: string }> = Array.isArray(out2?.images)
+              ? out2.images
+              : out2?.imageBase64
+              ? [{ imageBase64: out2.imageBase64, mimeType: out2?.mimeType || "image/png" }]
+              : [];
+            for (const im of imgs) {
+              if (agg.length >= target) break;
+              agg.push(im);
+            }
+            attempts++;
+          }
+          if (dbg) dbg.response = { ...(dbg.response || {}), imagesCount: agg.length };
+          const payload: any = {
+            images: agg,
+            imageBase64: agg[0]?.imageBase64,
+            mimeType: agg[0]?.mimeType || "image/png",
+            debug: dbg,
+          };
+          return new Response(JSON.stringify(payload), {
             status: 200,
             headers: { "content-type": "application/json" },
           });
         } catch (e2: any) {
           try {
-            // Last resort: SDK
+            // Last resort: SDK; aggregate to numImages
             const arSet = new Set(["1:1", "16:9", "9:16"]);
             const ar = arSet.has(aspectRatio || "") ? (aspectRatio as string) : "1:1";
             const promptText = `${prompt || "Product visual"}${keepBackground ? " (keep background consistent)" : ""}`;
-            const out3Core = await tryGenerate("gemini-2.5-flash-image");
+            const target = numImages;
+            const agg: Array<{ imageBase64: string; mimeType: string }> = [];
+            for (let i = 0; i < target; i++) {
+              const outCore = (await tryGenerate("gemini-2.5-flash-image")) as any;
+              const imgs: Array<{ imageBase64: string; mimeType: string }> = Array.isArray(outCore?.images)
+                ? outCore.images
+                : outCore?.imageBase64
+                ? [{ imageBase64: outCore.imageBase64, mimeType: outCore?.mimeType || "image/png" }]
+                : [];
+              for (const im of imgs) {
+                if (agg.length >= target) break;
+                agg.push(im);
+              }
+            }
             const out3 = {
-              ...out3Core,
+              images: agg,
+              imageBase64: agg[0]?.imageBase64,
+              mimeType: agg[0]?.mimeType || "image/png",
               debug: {
                 endpoint: "sdk-generateContent",
                 request: {
@@ -432,7 +471,7 @@ export async function POST(req: NextRequest) {
                   hasInlineImage: false,
                   numberOfImages: numImages,
                 },
-                response: {},
+                response: { imagesCount: agg.length },
               },
             } as any;
             return new Response(JSON.stringify(out3), {
