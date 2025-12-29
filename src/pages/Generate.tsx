@@ -305,21 +305,27 @@ export const Generate = () => {
                         const f = e.dataTransfer.files?.[0];
                         if (f) void handleFileSelected(f);
                       }}
-                      className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer group"
+                      className="border-2 border-dashed border-border rounded-xl p-0 text-center hover:border-primary/50 transition-colors cursor-pointer group overflow-hidden"
                     >
-                      <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                        <Upload className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
-                      </div>
-                      <p className="text-foreground font-medium mb-1">
-                        {uploading
-                          ? "Uploading..."
-                          : uploadedImageUrl || uploadedImageDataUrl
-                          ? "Image selected"
-                          : "Drop your image here"}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        or click to browse
-                      </p>
+                      {uploadedImageUrl || uploadedImageDataUrl ? (
+                        <div className="relative w-full h-56 md:h-64">
+                          <img
+                            src={uploadedImageUrl || uploadedImageDataUrl || ""}
+                            alt="Uploaded"
+                            className="object-contain w-full h-full bg-muted"
+                          />
+                        </div>
+                      ) : (
+                        <div className="p-8">
+                          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+                            <Upload className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
+                          </div>
+                          <p className="text-foreground font-medium mb-1">
+                            {uploading ? "Uploading..." : "Drop your image here"}
+                          </p>
+                          <p className="text-sm text-muted-foreground">or click to browse</p>
+                        </div>
+                      )}
                       <input
                         ref={fileInputRef}
                         type="file"
@@ -328,12 +334,6 @@ export const Generate = () => {
                         onChange={(e) => void handleFileSelected(e.target.files?.[0] || undefined)}
                       />
                     </div>
-
-                    {(uploadedImageUrl || uploadedImageDataUrl) && (
-                      <div className="mt-3">
-                        <img src={uploadedImageUrl || uploadedImageDataUrl || ""} alt="Uploaded" className="rounded-lg max-h-48 mx-auto" />
-                      </div>
-                    )}
                   </div>
 
                   {/* Scene Description */}
@@ -351,7 +351,10 @@ export const Generate = () => {
                   </div>
 
                   {/* Keep Background Toggle */}
-                  <label className="flex items-center justify-between p-4 bg-muted/50 rounded-lg cursor-pointer">
+                  <label
+                    className="flex items-center justify-between p-4 bg-muted/50 rounded-lg cursor-pointer"
+                    onClick={() => setKeepBackground(!keepBackground)}
+                  >
                     <div className="flex items-center gap-3">
                       <Layers className="w-5 h-5 text-primary" />
                       <div>
@@ -360,7 +363,6 @@ export const Generate = () => {
                       </div>
                     </div>
                     <div
-                      onClick={() => setKeepBackground(!keepBackground)}
                       className={`w-11 h-6 rounded-full transition-colors duration-200 relative ${
                         keepBackground ? "bg-primary" : "bg-border"
                       }`}
@@ -408,11 +410,11 @@ export const Generate = () => {
                 step={1}
                 value={numImages}
                 onChange={(e) => setNumImages(Number(e.target.value))}
-                className="range range-primary"
+                className="range range-primary accent-[hsl(var(--primary))]"
               />
-              <div className="flex justify-between text-[10px] text-muted-foreground px-1">
+              <div className="grid grid-cols-6 text-[10px] text-muted-foreground">
                 {[1, 2, 3, 4, 5, 6].map((n) => (
-                  <span key={n}>{n}</span>
+                  <span key={n} className="text-center">{n}</span>
                 ))}
               </div>
             </div>

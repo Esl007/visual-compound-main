@@ -355,13 +355,28 @@ export async function POST(req: NextRequest) {
           });
         } catch (e2: any) {
           try {
-            // Last resort: SDK
+            // Last resort: SDK with aggregation to honor numImages
             const arSet = new Set(["1:1", "16:9", "9:16"]);
             const ar = arSet.has(aspectRatio || "") ? (aspectRatio as string) : "1:1";
             const promptText = `${prompt || "Product visual"}${keepBackground ? " (keep background consistent)" : ""}`;
-            const out3Core = await tryGenerate("gemini-2.5-flash-image");
+            const target = numImages;
+            const agg: Array<{ imageBase64: string; mimeType: string }> = [];
+            for (let i = 0; i < target; i++) {
+              const outCore = (await tryGenerate("gemini-2.5-flash-image")) as any;
+              const imgs: Array<{ imageBase64: string; mimeType: string }> = Array.isArray(outCore?.images)
+                ? outCore.images
+                : outCore?.imageBase64
+                ? [{ imageBase64: outCore.imageBase64, mimeType: outCore?.mimeType || "image/png" }]
+                : [];
+              for (const im of imgs) {
+                if (agg.length >= target) break;
+                agg.push(im);
+              }
+            }
             const out3 = {
-              ...out3Core,
+              images: agg,
+              imageBase64: agg[0]?.imageBase64,
+              mimeType: agg[0]?.mimeType || "image/png",
               debug: {
                 endpoint: "sdk-generateContent",
                 request: {
@@ -372,7 +387,7 @@ export async function POST(req: NextRequest) {
                   hasInlineImage: true,
                   numberOfImages: numImages,
                 },
-                response: {},
+                response: { imagesCount: agg.length },
               },
             } as any;
             return new Response(JSON.stringify(out3), {
