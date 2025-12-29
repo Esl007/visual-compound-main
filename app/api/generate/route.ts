@@ -151,6 +151,7 @@ export async function POST(req: NextRequest) {
           generationConfig: {
             imageConfig: { aspectRatio: ar },
           },
+          aspect: ar,
         }),
       } as RequestInit);
       if (!res.ok) {
@@ -173,34 +174,105 @@ export async function POST(req: NextRequest) {
       throw new Error("No image content returned by REST endpoint");
     };
 
+    const tryGenerateImagesApi = async () => {
+      const arSet = new Set(["1:1", "16:9", "9:16"]);
+      const ar = arSet.has(aspectRatio || "") ? (aspectRatio as string) : "1:1";
+      const promptText = `${prompt || "Product visual"}${keepBackground ? " (keep background consistent)" : ""}`;
+
+      const url = "https://generativelanguage.googleapis.com/v1beta/images:generate";
+      const attempt = async (modelId: string) => {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-goog-api-key": GOOGLE_API_KEY,
+          },
+          body: JSON.stringify({
+            model: modelId,
+            // Common shapes used across Google samples; include both for compatibility
+            prompt: { text: promptText },
+            imageGenerationConfig: { aspectRatio: ar },
+            aspect: ar,
+          }),
+        } as RequestInit);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`images:generate failed: HTTP ${res.status} ${text}`);
+        }
+        const j = await res.json();
+        // Possible shapes: { images: [{ inlineData: { mimeType, data } } ...] }
+        const imgs = (j as any)?.images || (j as any)?.generatedImages || [];
+        for (const im of imgs) {
+          const inline = im?.inlineData || im?.inline_data || im?.image || im;
+          const data = inline?.data || inline?.bytesBase64 || inline?.base64;
+          const mime = inline?.mimeType || inline?.mime || "image/png";
+          if (data && mime?.startsWith("image/")) {
+            return { imageBase64: String(data), mimeType: String(mime) };
+          }
+        }
+        // Fallback: check candidates form just in case
+        const candidates = (j as any)?.candidates || [];
+        for (const c of candidates) {
+          const parts = (c?.content?.parts || []) as any[];
+          for (const p of parts) {
+            if (p?.inlineData?.mimeType?.startsWith("image/")) {
+              return {
+                imageBase64: p.inlineData.data as string,
+                mimeType: p.inlineData.mimeType as string,
+              };
+            }
+          }
+        }
+        throw new Error("images:generate response contained no image data");
+      };
+
+      // Try both forms of model identifier for compatibility
+      try {
+        return await attempt("gemini-2.5-flash-image");
+      } catch (_) {
+        return await attempt("models/gemini-2.5-flash-image");
+      }
+    };
+
     try {
-      const out = await tryGenerate("gemini-2.5-flash-image");
+      // Prefer direct images:generate to force image output
+      const out = await tryGenerateImagesApi();
       return new Response(JSON.stringify(out), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
     } catch (e1: any) {
       try {
+        // Next: REST generateContent with aspect
         const out2 = await tryGenerateRest();
         return new Response(JSON.stringify(out2), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
       } catch (e2: any) {
-        const key = cleanEnv(process.env.GOOGLE_API_KEY) || "";
-        const keyPrefix = key ? key.slice(0, 6) : "";
-        return new Response(
-          JSON.stringify({
-            error: "Google AI image generation failed",
-            detail: e2?.message || e1?.message,
-            model: "gemini-2.5-flash-image",
-            env: {
-              googleApiKeyPrefix: keyPrefix,
-              hasKey: Boolean(key),
-            },
-          }),
-          { status: 500 },
-        );
+        try {
+          // Last resort: SDK
+          const out3 = await tryGenerate("gemini-2.5-flash-image");
+          return new Response(JSON.stringify(out3), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        } catch (e3: any) {
+          const key = cleanEnv(process.env.GOOGLE_API_KEY) || "";
+          const keyPrefix = key ? key.slice(0, 6) : "";
+          return new Response(
+            JSON.stringify({
+              error: "Google AI image generation failed",
+              detail: e3?.message || e2?.message || e1?.message,
+              model: "gemini-2.5-flash-image",
+              env: {
+                googleApiKeyPrefix: keyPrefix,
+                hasKey: Boolean(key),
+              },
+            }),
+            { status: 500 },
+          );
+        }
       }
     }
   } catch (e: any) {
