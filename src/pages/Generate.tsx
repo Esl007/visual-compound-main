@@ -39,6 +39,8 @@ export const Generate = () => {
   const [sceneDescription, setSceneDescription] = useState("");
   const [aspectRatio, setAspectRatio] = useState<"1:1" | "16:9" | "9:16">("1:1");
   const [apiError, setApiError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<any | null>(null);
+  const outputRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const tab = searchParams?.get("tab");
@@ -95,6 +97,7 @@ export const Generate = () => {
   const handleGenerate = async () => {
     setIsGenerating(true);
     setApiError(null);
+    setDebugInfo(null);
     try {
       if (activeTab === "prompt") {
         // Optionally enhance prompt via Google AI route
@@ -147,11 +150,15 @@ export const Generate = () => {
         return;
       }
       const gen = await genRes.json();
+      if (gen?.debug) setDebugInfo(gen.debug);
       const mimeType: string = gen?.mimeType || "image/png";
       const b64: string | undefined = gen?.imageBase64;
       if (!b64) throw new Error("No image data returned");
       const dataUrl = `data:${mimeType};base64,${b64}`;
       setResultDataUrl(dataUrl);
+      setGeneratedImage(true);
+      // Scroll generated output into view
+      setTimeout(() => outputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
 
       // Upload generated image to storage
       const blob = await (await fetch(dataUrl)).blob();
@@ -160,8 +167,6 @@ export const Generate = () => {
       const put = await fetch(uploadUrl, { method: "PUT", headers: { "content-type": mimeType }, body: file });
       if (!put.ok) throw new Error("Failed to upload generated image");
       setResultUploadedUrl(fileUrl);
-
-      setGeneratedImage(true);
     } finally {
       setIsGenerating(false);
     }
@@ -393,6 +398,7 @@ export const Generate = () => {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3, delay: 0.1 }}
             className="card-elevated p-6 flex flex-col"
+            ref={outputRef}
           >
             {apiError && (
               <div className="mb-4 p-3 rounded-md border border-red-200 bg-red-50 text-red-700 text-sm break-words">
@@ -410,7 +416,7 @@ export const Generate = () => {
                     className="w-full space-y-4"
                   >
                     {/* Generated Image */}
-                    <div className="aspect-square rounded-xl overflow-hidden bg-muted flex items-center justify-center">
+                    <div className="rounded-xl overflow-hidden bg-muted flex items-center justify-center w-full h-[420px]">
                       {resultUploadedUrl || resultDataUrl ? (
                         <img
                           src={resultUploadedUrl || resultDataUrl || ""}
@@ -443,6 +449,25 @@ export const Generate = () => {
                         <span className="text-xs">Apply Template</span>
                       </button>
                     </div>
+
+                    {/* Debug: What was sent and what was received */}
+                    {debugInfo && (
+                      <div className="mt-2 p-3 rounded-md border border-border bg-muted/40 text-xs text-foreground space-y-2">
+                        <div className="font-medium">What was sent to Google</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div><span className="text-muted-foreground">Endpoint:</span> {debugInfo.endpoint || "-"}</div>
+                          <div><span className="text-muted-foreground">Model:</span> {debugInfo.request?.model || "-"}</div>
+                          <div><span className="text-muted-foreground">Aspect:</span> {debugInfo.request?.aspect || "-"}</div>
+                          <div><span className="text-muted-foreground">Inline image:</span> {String(Boolean(debugInfo.request?.hasInlineImage))}</div>
+                          <div className="col-span-2 break-words"><span className="text-muted-foreground">Prompt preview:</span> {debugInfo.request?.promptPreview || "-"}</div>
+                        </div>
+                        <div className="font-medium mt-2">What was received</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div><span className="text-muted-foreground">imagesCount:</span> {debugInfo.response?.imagesCount ?? "-"}</div>
+                          <div><span className="text-muted-foreground">candidatesCount:</span> {debugInfo.response?.candidatesCount ?? "-"}</div>
+                        </div>
+                      </div>
+                    )}
                   </motion.div>
                 ) : (
                   <motion.div

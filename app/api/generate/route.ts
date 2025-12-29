@@ -131,6 +131,18 @@ export async function POST(req: NextRequest) {
       }
       const arSet = new Set(["1:1", "16:9", "9:16"]);
       const ar = arSet.has(aspectRatio || "") ? (aspectRatio as string) : "1:1";
+      const promptText = `${prompt || "Product visual"}${keepBackground ? " (keep background consistent)" : ""}`;
+      const debug: any = {
+        endpoint: "generateContent:REST",
+        request: {
+          model: "gemini-2.5-flash-image",
+          aspect: ar,
+          promptPreview: (promptText || "").slice(0, 200),
+          promptLength: (promptText || "").length,
+          hasInlineImage: Boolean(imgPart),
+        },
+        response: {},
+      };
       const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
       const res = await fetch(url, {
         method: "POST",
@@ -144,7 +156,7 @@ export async function POST(req: NextRequest) {
             {
               role: "user",
               parts: [
-                { text: `${prompt || "Product visual"}${keepBackground ? " (keep background consistent)" : ""}` },
+                { text: promptText },
                 ...(imgPart ? [imgPart] : []),
               ],
             },
@@ -161,6 +173,7 @@ export async function POST(req: NextRequest) {
       }
       const j = await res.json();
       const candidates = (j as any)?.candidates || [];
+      debug.response.candidatesCount = candidates.length;
       for (const c of candidates) {
         const parts = (c?.content?.parts || []) as any[];
         for (const p of parts) {
@@ -168,6 +181,7 @@ export async function POST(req: NextRequest) {
             return {
               imageBase64: p.inlineData.data as string,
               mimeType: p.inlineData.mimeType as string,
+              debug,
             };
           }
         }
@@ -197,6 +211,17 @@ export async function POST(req: NextRequest) {
 
       const url = "https://generativelanguage.googleapis.com/v1beta/images:generate";
       const attempt = async (modelId: string) => {
+        const debug: any = {
+          endpoint: "images:generate",
+          request: {
+            model: modelId,
+            aspect: ar,
+            promptPreview: (promptText || "").slice(0, 200),
+            promptLength: (promptText || "").length,
+            hasInlineImage: false,
+          },
+          response: {},
+        };
         const res = await fetch(url, {
           method: "POST",
           headers: {
@@ -218,16 +243,18 @@ export async function POST(req: NextRequest) {
         const j = await res.json();
         // Possible shapes: { images: [{ inlineData: { mimeType, data } } ...] }
         const imgs = (j as any)?.images || (j as any)?.generatedImages || [];
+        debug.response.imagesCount = Array.isArray(imgs) ? imgs.length : 0;
         for (const im of imgs) {
           const inline = im?.inlineData || im?.inline_data || im?.image || im;
           const data = inline?.data || inline?.bytesBase64 || inline?.base64;
           const mime = inline?.mimeType || inline?.mime || "image/png";
           if (data && mime?.startsWith("image/")) {
-            return { imageBase64: String(data), mimeType: String(mime) };
+            return { imageBase64: String(data), mimeType: String(mime), debug };
           }
         }
         // Fallback: check candidates form just in case
         const candidates = (j as any)?.candidates || [];
+        debug.response.candidatesCount = candidates.length;
         for (const c of candidates) {
           const parts = (c?.content?.parts || []) as any[];
           for (const p of parts) {
@@ -235,6 +262,7 @@ export async function POST(req: NextRequest) {
               return {
                 imageBase64: p.inlineData.data as string,
                 mimeType: p.inlineData.mimeType as string,
+                debug,
               };
             }
           }
@@ -289,7 +317,24 @@ export async function POST(req: NextRequest) {
         } catch (e2: any) {
           try {
             // Last resort: SDK
-            const out3 = await tryGenerate("gemini-2.5-flash-image");
+            const arSet = new Set(["1:1", "16:9", "9:16"]);
+            const ar = arSet.has(aspectRatio || "") ? (aspectRatio as string) : "1:1";
+            const promptText = `${prompt || "Product visual"}${keepBackground ? " (keep background consistent)" : ""}`;
+            const out3Core = await tryGenerate("gemini-2.5-flash-image");
+            const out3 = {
+              ...out3Core,
+              debug: {
+                endpoint: "sdk-generateContent",
+                request: {
+                  model: "gemini-2.5-flash-image",
+                  aspect: ar,
+                  promptPreview: (promptText || "").slice(0, 200),
+                  promptLength: (promptText || "").length,
+                  hasInlineImage: true,
+                },
+                response: {},
+              },
+            } as any;
             return new Response(JSON.stringify(out3), {
               status: 200,
               headers: { "content-type": "application/json" },
@@ -331,7 +376,24 @@ export async function POST(req: NextRequest) {
         } catch (e2: any) {
           try {
             // Last resort: SDK
-            const out3 = await tryGenerate("gemini-2.5-flash-image");
+            const arSet = new Set(["1:1", "16:9", "9:16"]);
+            const ar = arSet.has(aspectRatio || "") ? (aspectRatio as string) : "1:1";
+            const promptText = `${prompt || "Product visual"}${keepBackground ? " (keep background consistent)" : ""}`;
+            const out3Core = await tryGenerate("gemini-2.5-flash-image");
+            const out3 = {
+              ...out3Core,
+              debug: {
+                endpoint: "sdk-generateContent",
+                request: {
+                  model: "gemini-2.5-flash-image",
+                  aspect: ar,
+                  promptPreview: (promptText || "").slice(0, 200),
+                  promptLength: (promptText || "").length,
+                  hasInlineImage: false,
+                },
+                response: {},
+              },
+            } as any;
             return new Response(JSON.stringify(out3), {
               status: 200,
               headers: { "content-type": "application/json" },
