@@ -403,19 +403,24 @@ export const Generate = () => {
                 <span>Number of images</span>
                 <span className="text-xs text-muted-foreground">{numImages}</span>
               </label>
-              <input
-                type="range"
-                min={1}
-                max={6}
-                step={1}
-                value={numImages}
-                onChange={(e) => setNumImages(Number(e.target.value))}
-                className="range range-primary accent-[hsl(var(--primary))]"
-              />
-              <div className="grid grid-cols-6 text-[10px] text-muted-foreground">
-                {[1, 2, 3, 4, 5, 6].map((n) => (
-                  <span key={n} className="text-center">{n}</span>
-                ))}
+              <div className="relative pb-5">
+                <input
+                  type="range"
+                  min={1}
+                  max={6}
+                  step={1}
+                  value={numImages}
+                  onChange={(e) => setNumImages(Number(e.target.value))}
+                  className="range w-full accent-[hsl(var(--primary))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/40"
+                />
+                <div className="pointer-events-none absolute left-0 right-0 bottom-0 grid grid-cols-6 text-[10px] text-muted-foreground">
+                  <span className="text-left">1</span>
+                  <span className="text-center">2</span>
+                  <span className="text-center">3</span>
+                  <span className="text-center">4</span>
+                  <span className="text-center">5</span>
+                  <span className="text-right">6</span>
+                </div>
               </div>
             </div>
 
