@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const prompt: string | undefined = body?.prompt;
     const productImageUrl: string | undefined = body?.productImageUrl;
+    const productImageDataUrl: string | undefined = body?.productImageDataUrl;
     const keepBackground: boolean | undefined = body?.keepBackground;
     const aspectRatio: string | undefined = body?.aspectRatio;
     const imageSize: "1K" | "2K" | "4K" | undefined = body?.imageSize;
@@ -35,14 +36,33 @@ export async function POST(req: NextRequest) {
     const tryGenerate = async (modelName: string) => {
       const model = genAI.getGenerativeModel({ model: modelName });
       let imgPart: any = null;
-      if (productImageUrl) {
-        const refRes = await fetch(productImageUrl);
-        if (!refRes.ok) {
-          throw new Error("Failed to fetch productImageUrl");
+      if (productImageDataUrl || productImageUrl) {
+        const source = productImageDataUrl || productImageUrl!;
+        if (source.startsWith("data:")) {
+          const idx = source.indexOf(",");
+          const meta = source.slice(5, idx);
+          const data = source.slice(idx + 1);
+          const mime = (meta.split(";")[0] || "image/png") as string;
+          imgPart = { inlineData: { mimeType: mime, data } };
+        } else {
+          const refRes = await fetch(source, {
+            method: "GET",
+            headers: {
+              "user-agent": "Mozilla/5.0 (compatible; VercelRuntime/1.0)",
+              accept: "image/*,*/*;q=0.8",
+            },
+            redirect: "follow",
+            cache: "no-store",
+          } as RequestInit);
+          if (!refRes.ok) {
+            const status = refRes.status;
+            const ct = refRes.headers.get("content-type");
+            throw new Error(`Failed to fetch product image: HTTP ${status} ct=${ct || "unknown"}`);
+          }
+          const mime = refRes.headers.get("content-type") || "image/png";
+          const buf = Buffer.from(await refRes.arrayBuffer());
+          imgPart = { inlineData: { mimeType: mime, data: buf.toString("base64") } };
         }
-        const mime = refRes.headers.get("content-type") || "image/png";
-        const buf = Buffer.from(await refRes.arrayBuffer());
-        imgPart = { inlineData: { mimeType: mime, data: buf.toString("base64") } };
       }
       const arSet = new Set(["1:1", "16:9", "9:16"]);
       const ar = arSet.has(aspectRatio || "") ? (aspectRatio as string) : "1:1";

@@ -33,6 +33,7 @@ export const Generate = () => {
   const [resultUploadedUrl, setResultUploadedUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [uploadedImageDataUrl, setUploadedImageDataUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [keepBackground, setKeepBackground] = useState(true);
   const [sceneDescription, setSceneDescription] = useState("");
@@ -67,6 +68,14 @@ export const Generate = () => {
     if (!file) return;
     setUploading(true);
     try {
+      // Capture data URL for server-side generation (avoid remote fetch issues)
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result));
+        fr.onerror = reject;
+        fr.readAsDataURL(file);
+      });
+      setUploadedImageDataUrl(dataUrl);
       const { uploadUrl, fileUrl } = await requestPresign(file);
       const put = await fetch(uploadUrl, {
         method: "PUT",
@@ -124,6 +133,7 @@ export const Generate = () => {
         body: JSON.stringify({
           prompt: activeTab === "prompt" ? prompt : sceneDescription || prompt,
           productImageUrl: activeTab === "product" ? uploadedImageUrl : undefined,
+          productImageDataUrl: activeTab === "product" ? uploadedImageDataUrl : undefined,
           keepBackground,
           aspectRatio,
         }),
