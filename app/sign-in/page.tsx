@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Sparkles, Mail, Lock, LogIn, Shield, CheckCircle2 } from "lucide-react";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
@@ -12,8 +13,14 @@ export default function SignInPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 800));
-      alert("This is a demo sign-in UI. Wire it to your auth provider.");
+      const supabase = supabaseBrowser();
+      const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/` : "/";
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: redirectTo },
+      });
+      if (error) throw error;
+      alert("Magic link sent! Check your email to finish signing in.");
     } finally {
       setLoading(false);
     }
@@ -24,7 +31,6 @@ export default function SignInPage() {
       <div className="w-full max-w-4xl">
         <div className="card-elevated overflow-hidden">
           <div className="grid md:grid-cols-2">
-            {/* Hero panel */}
             <div className="hidden md:flex flex-col gap-4 p-8 bg-gradient-to-br from-primary/10 to-transparent border-r border-border/50">
               <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center shadow-sm">
                 <Sparkles className="w-6 h-6 text-primary-foreground" />
@@ -51,7 +57,6 @@ export default function SignInPage() {
               </div>
             </div>
 
-            {/* Form panel */}
             <div className="p-6 lg:p-8">
               <form onSubmit={onSubmit} className="space-y-6">
                 <div className="space-y-1">

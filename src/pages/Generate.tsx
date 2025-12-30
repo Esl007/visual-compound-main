@@ -90,6 +90,22 @@ export const Generate = () => {
       });
       if (!put.ok) throw new Error("Upload failed");
       setUploadedImageUrl(fileUrl);
+      // Try to record in assets as a 'product' image (ignore failure if not authenticated)
+      try {
+        const imgDims = await (async () => {
+          return await new Promise<{ width: number; height: number }>((resolve) => {
+            const im = new Image();
+            im.onload = () => resolve({ width: im.naturalWidth, height: im.naturalHeight });
+            im.onerror = () => resolve({ width: 0, height: 0 });
+            im.src = dataUrl;
+          });
+        })();
+        await fetch("/api/assets", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url: fileUrl, type: "product", width: imgDims.width, height: imgDims.height }),
+        });
+      } catch {}
     } catch (e) {
       console.error(e);
     } finally {
@@ -181,12 +197,26 @@ export const Generate = () => {
       setTimeout(() => outputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
 
       // Upload generated image to storage
+      const { width: genW, height: genH } = await new Promise<{ width: number; height: number }>((resolve) => {
+        const im = new Image();
+        im.onload = () => resolve({ width: im.naturalWidth, height: im.naturalHeight });
+        im.onerror = () => resolve({ width: 0, height: 0 });
+        im.src = firstDataUrl;
+      });
       const blob = await (await fetch(firstDataUrl)).blob();
       const file = new File([blob], `generated-${Date.now()}.png`, { type: mimeType });
       const { uploadUrl, fileUrl } = await requestPresign(file);
       const put = await fetch(uploadUrl, { method: "PUT", headers: { "content-type": mimeType }, body: file });
       if (!put.ok) throw new Error("Failed to upload generated image");
       setResultUploadedUrl(fileUrl);
+      // Index in Supabase assets (ignore if not authenticated)
+      try {
+        await fetch("/api/assets", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url: fileUrl, type: "final", width: genW, height: genH }),
+        });
+      } catch {}
     } finally {
       setIsGenerating(false);
     }
