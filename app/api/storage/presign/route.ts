@@ -74,10 +74,8 @@ export async function POST(req: NextRequest) {
       { status: 200, headers: { "content-type": "application/json" } },
     );
   } catch (e: any) {
-    const endpoint = cleanEnv(process.env.S3_ENDPOINT);
-    const bucket = cleanEnv(process.env.S3_BUCKET);
     return new Response(
-      JSON.stringify({ error: e?.message || "Unknown error", details: { endpoint, bucket } }),
+      JSON.stringify({ error: e?.message || "Unknown error" }),
       { status: 500, headers: { "content-type": "application/json" } },
     );
   }
