@@ -85,11 +85,11 @@ export const Generate = () => {
     setGeneratedImage(false);
   };
 
-  const requestPresign = async (file: File) => {
+  const requestPresign = async (file: File, opts?: { bucket?: string; prefix?: string }) => {
     const res = await fetch("/api/storage/presign", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ contentType: file.type, fileName: file.name }),
+      body: JSON.stringify({ contentType: file.type, fileName: file.name, bucket: opts?.bucket, prefix: opts?.prefix }),
     });
     if (!res.ok) throw new Error("Failed to get upload URL");
     return (await res.json()) as { uploadUrl: string; fileUrl: string };
@@ -108,7 +108,7 @@ export const Generate = () => {
         fr.readAsDataURL(file);
       });
       setUploadedImageDataUrl(dataUrl);
-      const { uploadUrl, fileUrl } = await requestPresign(file);
+      const { uploadUrl, fileUrl } = await requestPresign(file, { bucket: "AI-Image-Gen-3", prefix: "uploads" });
       const put = await fetch(uploadUrl, {
         method: "PUT",
         headers: { "content-type": file.type },
@@ -232,7 +232,7 @@ export const Generate = () => {
       });
       const blob = await (await fetch(firstDataUrl)).blob();
       const file = new File([blob], `generated-${Date.now()}.png`, { type: mimeType });
-      const { uploadUrl, fileUrl } = await requestPresign(file);
+      const { uploadUrl, fileUrl } = await requestPresign(file, { bucket: "AI-Image-Gen-3", prefix: "generated" });
       const put = await fetch(uploadUrl, { method: "PUT", headers: { "content-type": mimeType }, body: file });
       if (!put.ok) throw new Error("Failed to upload generated image");
       setResultUploadedUrl(fileUrl);

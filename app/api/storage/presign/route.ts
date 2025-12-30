@@ -23,9 +23,17 @@ export async function POST(req: NextRequest) {
     const {
       contentType,
       fileName,
-    }: { contentType?: string; fileName?: string } = await req.json();
+      bucket: requestedBucket,
+      prefix,
+    }: { contentType?: string; fileName?: string; bucket?: string; prefix?: string } = await req.json();
 
-    const bucket = required("S3_BUCKET", process.env.S3_BUCKET);
+    const defaultBucket = required("S3_BUCKET", process.env.S3_BUCKET);
+    const cleanedRequestedBucket = cleanEnv(requestedBucket);
+    // Only allow overriding to the default bucket or the explicitly permitted production bucket
+    const allowedBuckets = new Set([defaultBucket, "AI-Image-Gen-3"]);
+    const bucket = cleanedRequestedBucket && allowedBuckets.has(cleanedRequestedBucket)
+      ? cleanedRequestedBucket
+      : defaultBucket;
     const region = required("S3_REGION", process.env.S3_REGION);
     const accessKeyId = required("S3_ACCESS_KEY_ID", process.env.S3_ACCESS_KEY_ID);
     const secretAccessKey = required("S3_SECRET_ACCESS_KEY", process.env.S3_SECRET_ACCESS_KEY);
@@ -40,8 +48,9 @@ export async function POST(req: NextRequest) {
     });
 
     // Generate key
+    const safePrefix = (prefix || "uploads").replace(/(^\/+|\/+?$)/g, "");
     const ext = (fileName || "").split(".").pop();
-    const key = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}${ext ? `.${ext}` : ""}`;
+    const key = `${safePrefix}/${Date.now()}-${Math.random().toString(36).slice(2)}${ext ? `.${ext}` : ""}`;
 
     const command = new PutObjectCommand({
       Bucket: bucket,
