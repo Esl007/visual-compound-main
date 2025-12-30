@@ -1,9 +1,11 @@
 "use client";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
-export default function AuthCallbackClient() {
+export const dynamic = "force-dynamic";
+
+function CallbackInner() {
   const router = useRouter();
   const params = useSearchParams();
 
@@ -34,5 +36,13 @@ export default function AuthCallbackClient() {
     <div className="min-h-[50vh] flex items-center justify-center p-8 text-sm text-muted-foreground">
       Completing sign-in...
     </div>
+  );
+}
+
+export default function AuthCallbackClient() {
+  return (
+    <Suspense fallback={<div className="min-h-[50vh] flex items-center justify-center p-8 text-sm text-muted-foreground">Completing sign-in...</div>}>
+      <CallbackInner />
+    </Suspense>
   );
 }
