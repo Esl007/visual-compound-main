@@ -9,11 +9,11 @@ export const dynamic = "force-dynamic";
 export default function SignInPage() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined;
-  const googleEnabled = process.env.NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED === "true";
   const siteEnv = process.env.NEXT_PUBLIC_SITE_URL as string | undefined;
+  const nextParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("next") : null;
   const redirectTo = typeof window !== "undefined"
-    ? `${siteEnv || window.location.origin}/auth/callback`
-    : `${(siteEnv || "/").replace(/\/$/, "")}/auth/callback`;
+    ? `${siteEnv || window.location.origin}/auth/callback${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`
+    : `${(siteEnv || "/").replace(/\/$/, "")}/auth/callback${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`;
 
   const supabase = useMemo(() => {
     if (!url || !anon) return null as any;
@@ -44,7 +44,7 @@ export default function SignInPage() {
         <h1 className="text-2xl font-display mb-4">Sign in</h1>
         <Auth
           supabaseClient={supabase}
-          providers={googleEnabled ? ["google"] : []}
+          providers={["google"]}
           appearance={{ theme: ThemeSupa }}
           view="sign_in"
           redirectTo={redirectTo}
