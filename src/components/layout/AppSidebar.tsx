@@ -28,6 +28,7 @@ interface NavItem {
 const primaryNav: NavItem[] = [
   { label: "Dashboard", icon: <Home className="w-5 h-5" />, path: "/" },
   { label: "Generate", icon: <Sparkles className="w-5 h-5" />, path: "/generate" },
+  { label: "Assets", icon: <Package className="w-5 h-5" />, path: "/assets" },
   { label: "Products", icon: <Package className="w-5 h-5" />, path: "/products" },
   { label: "Templates", icon: <LayoutTemplate className="w-5 h-5" />, path: "/templates" },
   { label: "Ad Builder", icon: <PenTool className="w-5 h-5" />, path: "/ad-builder" },

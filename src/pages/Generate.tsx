@@ -1,4 +1,5 @@
 "use client";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -24,6 +25,7 @@ export const Generate = () => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [isAuthed, setIsAuthed] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState((searchParams?.get("tab") as string | null) || "prompt");
   const [prompt, setPrompt] = useState("");
   const [enhancePrompt, setEnhancePrompt] = useState(true);
@@ -44,6 +46,29 @@ export const Generate = () => {
   const [debugInfo, setDebugInfo] = useState<any | null>(null);
   const outputRef = useRef<HTMLDivElement | null>(null);
   const [zoomSrc, setZoomSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data } = await supabaseBrowser().auth.getUser();
+        if (!mounted) return;
+        if (!data?.user) {
+          setIsAuthed(false);
+          router.push("/sign-in");
+        } else {
+          setIsAuthed(true);
+        }
+      } catch {
+        if (!mounted) return;
+        setIsAuthed(false);
+        router.push("/sign-in");
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
 
   useEffect(() => {
     const tab = searchParams?.get("tab");
@@ -71,6 +96,7 @@ export const Generate = () => {
   };
 
   const handleFileSelected = async (file?: File) => {
+    if (!isAuthed) return;
     if (!file) return;
     setUploading(true);
     try {
@@ -114,6 +140,7 @@ export const Generate = () => {
   };
 
   const handleGenerate = async () => {
+    if (!isAuthed) return;
     setIsGenerating(true);
     setApiError(null);
     setDebugInfo(null);
@@ -224,6 +251,11 @@ export const Generate = () => {
 
   return (
     <div className="min-h-screen p-8 lg:p-12">
+      {isAuthed === false && (
+        <div className="mb-4 p-3 rounded-md border border-yellow-200 bg-yellow-50 text-yellow-800 text-sm">
+          Sign in is required to generate images.
+        </div>
+      )}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

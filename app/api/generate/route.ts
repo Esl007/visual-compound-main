@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { supabaseServer } from "@/lib/supabase/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,6 +15,11 @@ function cleanEnv(v?: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    const supa = supabaseServer();
+    const { data: { session } } = await supa.auth.getSession();
+    if (!session) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    }
     const body = await req.json();
     const prompt: string | undefined = body?.prompt;
     const productImageUrl: string | undefined = body?.productImageUrl;
