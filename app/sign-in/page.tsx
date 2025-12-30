@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 export default function SignInPage() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined;
+  const googleEnabled = process.env.NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED === "true";
   const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/` : "/";
 
   const supabase = useMemo(() => {
@@ -40,7 +41,7 @@ export default function SignInPage() {
         <h1 className="text-2xl font-display mb-4">Sign in</h1>
         <Auth
           supabaseClient={supabase}
-          providers={["google"]}
+          providers={googleEnabled ? ["google"] : []}
           appearance={{ theme: ThemeSupa }}
           view="magic_link"
           redirectTo={redirectTo}

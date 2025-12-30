@@ -26,10 +26,14 @@ export default function AssetsPage() {
       }
       try {
         const res = await fetch("/api/creatives", { cache: "no-store" });
+        if (res.status === 401) {
+          window.location.href = "/sign-in";
+          return;
+        }
         if (!res.ok) throw new Error("Failed to load assets");
-        const items = (await res.json()) as Asset[];
+        const j = (await res.json()) as { assets?: Asset[] };
         if (!mounted) return;
-        setAssets(items);
+        setAssets(Array.isArray(j?.assets) ? j.assets : []);
       } catch (e) {
         console.error(e);
         if (!mounted) return;
