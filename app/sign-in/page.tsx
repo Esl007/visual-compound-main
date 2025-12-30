@@ -12,8 +12,8 @@ export default function SignInPage() {
   const siteEnv = process.env.NEXT_PUBLIC_SITE_URL as string | undefined;
   const nextParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("next") : null;
   const redirectTo = typeof window !== "undefined"
-    ? `${siteEnv || window.location.origin}/auth/callback${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`
-    : `${(siteEnv || "/").replace(/\/$/, "")}/auth/callback${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`;
+    ? `${siteEnv || window.location.origin}/auth/callback-client${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`
+    : `${(siteEnv || "/").replace(/\/$/, "")}/auth/callback-client${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`;
 
   const supabase = useMemo(() => {
     if (!url || !anon) return null as any;
