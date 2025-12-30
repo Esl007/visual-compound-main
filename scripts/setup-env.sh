@@ -17,6 +17,8 @@ S3_FORCE=${S3_FORCE:-true}
 read -rp "NEXT_PUBLIC_SUPABASE_URL: " SUPA_URL
 read -rp "NEXT_PUBLIC_SUPABASE_ANON_KEY (paste, will not echo): " -s SUPA_ANON
 printf "\n"
+read -rp "NEXT_PUBLIC_SITE_URL (e.g. https://visual-compound-main.vercel.app): " SITE_URL
+SITE_URL=${SITE_URL:-}
 read -rp "GOOGLE_API_KEY (paste, will not echo): " -s GOOGLE
 printf "\n"
 read -rp "S3_ACCESS_KEY_ID (paste, will not echo): " -s S3_ID
@@ -35,6 +37,7 @@ TMP="$(mktemp)"
   echo "S3_SECRET_ACCESS_KEY=$S3_SECRET"
   echo "NEXT_PUBLIC_SUPABASE_URL=$SUPA_URL"
   echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$SUPA_ANON"
+  [ -n "$SITE_URL" ] && echo "NEXT_PUBLIC_SITE_URL=$SITE_URL"
   echo "GOOGLE_API_KEY=$GOOGLE"
 } > "$TMP"
 

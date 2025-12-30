@@ -108,14 +108,14 @@ export const Generate = () => {
         fr.readAsDataURL(file);
       });
       setUploadedImageDataUrl(dataUrl);
-      const { uploadUrl, fileUrl } = await requestPresign(file, { bucket: "AI-Image-Gen-3", prefix: "uploads" });
-      const put = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "content-type": file.type },
-        body: file,
-      });
-      if (!put.ok) throw new Error("Upload failed");
-      setUploadedImageUrl(fileUrl);
+      let presign = await requestPresign(file, { bucket: "AI-Image-Gen-3", prefix: "uploads" });
+      let put = await fetch(presign.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
+      if (!put.ok) {
+        presign = await requestPresign(file);
+        put = await fetch(presign.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
+        if (!put.ok) throw new Error("Upload failed");
+      }
+      setUploadedImageUrl(presign.fileUrl);
       // Try to record in assets as a 'product' image (ignore failure if not authenticated)
       try {
         const imgDims = await (async () => {
@@ -129,7 +129,7 @@ export const Generate = () => {
         await fetch("/api/assets", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ url: fileUrl, type: "product", width: imgDims.width, height: imgDims.height }),
+          body: JSON.stringify({ url: presign.fileUrl, type: "product", width: imgDims.width, height: imgDims.height }),
         });
       } catch {}
     } catch (e) {
@@ -232,16 +232,20 @@ export const Generate = () => {
       });
       const blob = await (await fetch(firstDataUrl)).blob();
       const file = new File([blob], `generated-${Date.now()}.png`, { type: mimeType });
-      const { uploadUrl, fileUrl } = await requestPresign(file, { bucket: "AI-Image-Gen-3", prefix: "generated" });
-      const put = await fetch(uploadUrl, { method: "PUT", headers: { "content-type": mimeType }, body: file });
-      if (!put.ok) throw new Error("Failed to upload generated image");
-      setResultUploadedUrl(fileUrl);
+      let presignGen = await requestPresign(file, { bucket: "AI-Image-Gen-3", prefix: "generated" });
+      let putGen = await fetch(presignGen.uploadUrl, { method: "PUT", headers: { "content-type": mimeType }, body: file });
+      if (!putGen.ok) {
+        presignGen = await requestPresign(file);
+        putGen = await fetch(presignGen.uploadUrl, { method: "PUT", headers: { "content-type": mimeType }, body: file });
+        if (!putGen.ok) throw new Error("Failed to upload generated image");
+      }
+      setResultUploadedUrl(presignGen.fileUrl);
       // Index in Supabase assets (ignore if not authenticated)
       try {
         await fetch("/api/assets", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ url: fileUrl, type: "final", width: genW, height: genH }),
+          body: JSON.stringify({ url: presignGen.fileUrl, type: "final", width: genW, height: genH }),
         });
       } catch {}
     } finally {
