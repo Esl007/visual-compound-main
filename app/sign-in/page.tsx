@@ -2,7 +2,7 @@
 import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,10 @@ export default function SignInPage() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined;
   const googleEnabled = process.env.NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED === "true";
-  const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/` : "/";
+  const siteEnv = process.env.NEXT_PUBLIC_SITE_URL as string | undefined;
+  const redirectTo = typeof window !== "undefined"
+    ? `${siteEnv || window.location.origin}/auth/callback`
+    : `${(siteEnv || "/").replace(/\/$/, "")}/auth/callback`;
 
   const supabase = useMemo(() => {
     if (!url || !anon) return null as any;
@@ -43,11 +46,47 @@ export default function SignInPage() {
           supabaseClient={supabase}
           providers={googleEnabled ? ["google"] : []}
           appearance={{ theme: ThemeSupa }}
-          view="magic_link"
+          view="sign_in"
           redirectTo={redirectTo}
           showLinks={true}
         />
+        <EmailMagicLink supabaseClient={supabase} baseUrl={redirectTo} />
       </div>
     </div>
+  );
+}
+
+function EmailMagicLink({ supabaseClient, baseUrl }: { supabaseClient: any; baseUrl: string }) {
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const { error } = await supabaseClient.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: baseUrl },
+      });
+      if (error) throw error;
+      alert("Magic link sent. Check your email.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <form onSubmit={onSubmit} className="mt-6 space-y-3">
+      <label className="text-sm text-foreground">Email (Magic Link)</label>
+      <input
+        type="email"
+        required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="you@example.com"
+        className="input input-bordered w-full"
+      />
+      <button type="submit" disabled={loading} className="btn-primary w-full">
+        {loading ? "Sending..." : "Send Magic Link"}
+      </button>
+    </form>
   );
 }
