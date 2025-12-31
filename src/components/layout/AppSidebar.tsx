@@ -93,12 +93,11 @@ export const AppSidebar = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 flex-1"
           >
-            <div className="w-8 h-8 rounded-lg overflow-hidden bg-transparent flex items-center justify-center">
-              <img src="/logo.png" alt="Vizualy AI" className="w-8 h-8 object-contain" />
+            <div className="overflow-hidden bg-transparent flex items-center">
+              <img src="/logo.png" alt="Vizualy AI" className="h-8 w-full object-contain" />
             </div>
-            <span className="font-display font-semibold text-foreground">Vizualy AI</span>
           </motion.div>
         )}
         <button
