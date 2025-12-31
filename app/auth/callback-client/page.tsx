@@ -2,6 +2,7 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { toast } from "sonner";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,8 @@ function CallbackInner() {
           router.replace(`/sign-in?error=${encodeURIComponent(error.message)}`);
           return;
         }
-        router.replace(next);
+        try { toast.success("Signed in successfully"); } catch {}
+        setTimeout(() => router.replace(next), 800);
       } catch (e: any) {
         router.replace(`/sign-in?error=${encodeURIComponent(e?.message || "Auth failed")}`);
       }

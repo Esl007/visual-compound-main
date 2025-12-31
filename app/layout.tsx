@@ -5,7 +5,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import Providers from "./providers";
 
 export const metadata: Metadata = {
-  title: "VisualAI",
+  title: "Vizualy AI",
   description: "AI-powered visual generation",
 };
 

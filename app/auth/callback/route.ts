@@ -15,12 +15,16 @@ export async function GET(req: NextRequest) {
       if (error) {
         return NextResponse.redirect(new URL(`/sign-in?error=${encodeURIComponent(error.message)}`, url.origin));
       }
+      // After setting cookies, hop to the client callback to show a success toast,
+      // then continue to the intended destination.
+      const cb = new URL(`/auth/callback-client?ok=1&next=${encodeURIComponent(next)}`, url.origin);
+      return NextResponse.redirect(cb);
     }
   } catch (_) {
     // ignore; redirect to sign-in for safety
     return NextResponse.redirect(new URL("/sign-in", url.origin));
   }
   // Redirect to next path (defaults to home)
-  const target = new URL(next, url.origin);
+  const target = new URL(`/auth/callback-client?ok=1&next=${encodeURIComponent(next)}`, url.origin);
   return NextResponse.redirect(target);
 }

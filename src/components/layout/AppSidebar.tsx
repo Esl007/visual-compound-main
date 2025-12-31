@@ -95,10 +95,10 @@ export const AppSidebar = () => {
             exit={{ opacity: 0 }}
             className="flex items-center gap-2"
           >
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-primary-foreground" />
+            <div className="w-8 h-8 rounded-lg overflow-hidden bg-transparent flex items-center justify-center">
+              <img src="/logo.png" alt="Vizualy AI" className="w-8 h-8 object-contain" />
             </div>
-            <span className="font-display font-semibold text-foreground">VisualAI</span>
+            <span className="font-display font-semibold text-foreground">Vizualy AI</span>
           </motion.div>
         )}
         <button
@@ -129,11 +129,18 @@ export const AppSidebar = () => {
 
       {/* Footer Navigation */}
       <div className="p-3 border-t border-sidebar-border space-y-1">
-        {footerNav.map((item) => (
-          <div key={item.path}>
-            <NavLink item={item} />
-          </div>
-        ))}
+        {footerNav.map((item) => {
+          const isSignIn = item.path === "/sign-in";
+          const safePath = pathname || "/";
+          const nextAware: NavItem = isSignIn
+            ? { ...item, path: `/sign-in?next=${encodeURIComponent(safePath)}` }
+            : item;
+          return (
+            <div key={item.path}>
+              <NavLink item={nextAware} />
+            </div>
+          );
+        })}
       </div>
     </motion.aside>
   );

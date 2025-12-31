@@ -12,8 +12,8 @@ export default function SignInPage() {
   const siteEnv = process.env.NEXT_PUBLIC_SITE_URL as string | undefined;
   const nextParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("next") : null;
   const redirectTo = typeof window !== "undefined"
-    ? `${siteEnv || window.location.origin}/auth/callback-client${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`
-    : `${(siteEnv || "/").replace(/\/$/, "")}/auth/callback-client${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`;
+    ? `${siteEnv || window.location.origin}/auth/callback${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`
+    : `${(siteEnv || "/").replace(/\/$/, "")}/auth/callback${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`;
 
   const supabase = useMemo(() => {
     if (!url || !anon) return null as any;
@@ -42,9 +42,18 @@ export default function SignInPage() {
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-6 lg:p-10">
       <div className="w-full max-w-md card-elevated p-6">
         <h1 className="text-2xl font-display mb-4">Sign in</h1>
+        <button
+          type="button"
+          className="btn-primary w-full mb-3"
+          onClick={async () => {
+            await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } });
+          }}
+        >
+          Continue with Google
+        </button>
         <Auth
           supabaseClient={supabase}
-          providers={["google"]}
+          providers={[]}
           appearance={{ theme: ThemeSupa }}
           view="sign_in"
           redirectTo={redirectTo}
