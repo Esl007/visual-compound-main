@@ -127,11 +127,6 @@
 }
 
 @layer base {
-  * {
-    @apply border-border;
-    border-width: 0.5px;
-  }
-
   html {
     @apply scroll-smooth;
   }
@@ -235,6 +230,14 @@
 }
 
 @layer utilities {
+  /* Thinner dividers across the UI */
+  .border { border-width: 0.5px !important; }
+  .border-t { border-top-width: 0.5px !important; }
+  .border-b { border-bottom-width: 0.5px !important; }
+  .border-l { border-left-width: 0.5px !important; }
+  .border-r { border-right-width: 0.5px !important; }
+  .divide-y > :not([hidden]) ~ :not([hidden]) { border-top-width: 0.5px !important; }
+  .divide-x > :not([hidden]) ~ :not([hidden]) { border-left-width: 0.5px !important; }
   .animate-fade-in {
     animation: fadeIn 0.4s ease-out forwards;
   }
