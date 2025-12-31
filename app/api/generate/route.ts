@@ -13,6 +13,19 @@ function cleanEnv(v?: string) {
   return out;
 }
 
+// Abort long-running fetches to avoid hanging external calls
+async function fetchWithTimeout(url: string, opts: RequestInit & { timeoutMs?: number } = {}) {
+  const { timeoutMs = 45000, ...rest } = opts as any;
+  const ac = new AbortController();
+  const id = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    return await fetchWithTimeout(url, { ...(rest as any), signal: ac.signal } as any);
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+
 export async function POST(req: NextRequest) {
   try {
     const supa = supabaseServer();
@@ -56,15 +69,14 @@ export async function POST(req: NextRequest) {
           const mime = (meta.split(";")[0] || "image/png") as string;
           imgPart = { inlineData: { mimeType: mime, data } };
         } else {
-          const refRes = await fetch(source, {
+          const refRes = await fetchWithTimeout(source, {
             method: "GET",
             headers: {
               "user-agent": "Mozilla/5.0 (compatible; VercelRuntime/1.0)",
               accept: "image/*,*/*;q=0.8",
             },
-            redirect: "follow",
-            cache: "no-store",
-          } as RequestInit);
+            redirect: "follow",\1          }  timeoutMs: 20000,
+          } as any);
           if (!refRes.ok) {
             const status = refRes.status;
             const ct = refRes.headers.get("content-type");
@@ -121,15 +133,14 @@ export async function POST(req: NextRequest) {
           const mime = (meta.split(";")[0] || "image/png") as string;
           imgPart = { inlineData: { mimeType: mime, data } };
         } else {
-          const refRes = await fetch(source, {
+          const refRes = await fetchWithTimeout(source, {
             method: "GET",
             headers: {
               "user-agent": "Mozilla/5.0 (compatible; VercelRuntime/1.0)",
               accept: "image/*,*/*;q=0.8",
             },
-            redirect: "follow",
-            cache: "no-store",
-          } as RequestInit);
+            redirect: "follow",\1          }  timeoutMs: 20000,
+          } as any);
           if (!refRes.ok) {
             const status = refRes.status;
             const ct = refRes.headers.get("content-type");
@@ -156,7 +167,7 @@ export async function POST(req: NextRequest) {
         response: {},
       };
       const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
-      const res = await fetch(url, {
+      const res = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -178,7 +189,7 @@ export async function POST(req: NextRequest) {
           },
           aspect: ar,
         }),
-      } as RequestInit);
+      } as any);
       if (!res.ok) {
         const text = await res.text();
         throw new Error(`REST generation failed: HTTP ${res.status} ${text}`);
@@ -236,7 +247,7 @@ export async function POST(req: NextRequest) {
           },
           response: {},
         };
-        const res = await fetch(url, {
+        const res = await fetchWithTimeout(url, {
           method: "POST",
           headers: {
             "content-type": "application/json",
@@ -249,7 +260,7 @@ export async function POST(req: NextRequest) {
             imageGenerationConfig: { aspectRatio: ar, numberOfImages: numImages, outputMimeType: "image/png" },
             aspect: ar,
           }),
-        } as RequestInit);
+        } as any);
         if (!res.ok) {
           const text = await res.text();
           throw new Error(`images:generate failed: HTTP ${res.status} ${text}`);
@@ -323,22 +334,28 @@ export async function POST(req: NextRequest) {
         const target = numImages;
         const agg: Array<{ imageBase64: string; mimeType: string }> = [];
         let dbg: any = null;
-        let attempts = 0;
-        while (agg.length < target && attempts < Math.max(target, 3)) {
-          const out = (await tryGenerateRest()) as any;
-          if (!dbg && out?.debug) dbg = out.debug;
-          const imgs: Array<{ imageBase64: string; mimeType: string }> = Array.isArray(out?.images)
-            ? out.images
-            : out?.imageBase64
-            ? [{ imageBase64: out.imageBase64, mimeType: out?.mimeType || "image/png" }]
-            : [];
-          for (const im of imgs) {
-            if (agg.length >= target) break;
-            agg.push(im);
-          }
-          attempts++;
-        }
-        if (dbg) {
+const batch = Math.min(3, Math.max(1, target));
+let guard = 0;
+while (agg.length < target && guard < 6) {
+  const need = target - agg.length;
+  const toLaunch = Math.min(batch, need);
+  const outs = await Promise.all(Array.from({ length: toLaunch }).map(() => tryGenerateRest()));
+  for (const out of outs as any[]) {
+    if (!dbg && out?.debug) dbg = out.debug;
+    const imgs: Array<{ imageBase64: string; mimeType: string }> = Array.isArray(out?.images)
+      ? out.images
+      : out?.imageBase64
+      ? [{ imageBase64: out.imageBase64, mimeType: out?.mimeType || "image/png" }]
+      : [];
+    for (const im of imgs) {
+      if (agg.length >= target) break;
+      agg.push(im);
+    }
+    if (agg.length >= target) break;
+  }
+  guard++;
+}
+if (dbg) {
           dbg.response = { ...(dbg.response || {}), imagesCount: agg.length };
         }
         const payload: any = {
@@ -432,22 +449,28 @@ export async function POST(req: NextRequest) {
           const target = numImages;
           const agg: Array<{ imageBase64: string; mimeType: string }> = [];
           let dbg: any = null;
-          let attempts = 0;
-          while (agg.length < target && attempts < Math.max(target, 3)) {
-            const out2 = (await tryGenerateRest()) as any;
-            if (!dbg && out2?.debug) dbg = out2.debug;
-            const imgs: Array<{ imageBase64: string; mimeType: string }> = Array.isArray(out2?.images)
-              ? out2.images
-              : out2?.imageBase64
-              ? [{ imageBase64: out2.imageBase64, mimeType: out2?.mimeType || "image/png" }]
-              : [];
-            for (const im of imgs) {
-              if (agg.length >= target) break;
-              agg.push(im);
-            }
-            attempts++;
-          }
-          if (dbg) dbg.response = { ...(dbg.response || {}), imagesCount: agg.length };
+const batch = Math.min(3, Math.max(1, target));
+let guard = 0;
+while (agg.length < target && guard < 6) {
+  const need = target - agg.length;
+  const toLaunch = Math.min(batch, need);
+  const outs = await Promise.all(Array.from({ length: toLaunch }).map(() => tryGenerateRest()));
+  for (const out of outs as any[]) {
+    if (!dbg && out?.debug) dbg = out.debug;
+    const imgs: Array<{ imageBase64: string; mimeType: string }> = Array.isArray(out?.images)
+      ? out.images
+      : out?.imageBase64
+      ? [{ imageBase64: out.imageBase64, mimeType: out?.mimeType || "image/png" }]
+      : [];
+    for (const im of imgs) {
+      if (agg.length >= target) break;
+      agg.push(im);
+    }
+    if (agg.length >= target) break;
+  }
+  guard++;
+}
+if (dbg) dbg.response = { ...(dbg.response || {}), imagesCount: agg.length };
           const payload: any = {
             images: agg,
             imageBase64: agg[0]?.imageBase64,
