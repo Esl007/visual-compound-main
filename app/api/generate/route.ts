@@ -75,7 +75,9 @@ export async function POST(req: NextRequest) {
               "user-agent": "Mozilla/5.0 (compatible; VercelRuntime/1.0)",
               accept: "image/*,*/*;q=0.8",
             },
-            redirect: "follow",\1          }  timeoutMs: 20000,
+            redirect: "follow",
+            cache: "no-store",
+            timeoutMs: 20000,
           } as any);
           if (!refRes.ok) {
             const status = refRes.status;
@@ -139,7 +141,9 @@ export async function POST(req: NextRequest) {
               "user-agent": "Mozilla/5.0 (compatible; VercelRuntime/1.0)",
               accept: "image/*,*/*;q=0.8",
             },
-            redirect: "follow",\1          }  timeoutMs: 20000,
+            redirect: "follow",
+            cache: "no-store",
+            timeoutMs: 20000,
           } as any);
           if (!refRes.ok) {
             const status = refRes.status;
