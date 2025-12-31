@@ -27,7 +27,7 @@
 
     /* Muted */
     --muted: 220 14% 95%;
-    --muted-foreground: 220 10% 50%;
+    --muted-foreground: 231 20% 13%;
 
     /* Accent */
     --accent: 243 74% 75%;
@@ -129,6 +129,7 @@
 @layer base {
   * {
     @apply border-border;
+    border-width: 0.5px;
   }
 
   html {
