@@ -1,4 +1,5 @@
 -- Profiles table linked to auth.users
+create extension if not exists pgcrypto;
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
@@ -8,11 +9,13 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
-create policy if not exists "Users read own profile"
+drop policy if exists "Users read own profile" on public.profiles;
+create policy "Users read own profile"
   on public.profiles for select
   using (auth.uid() = id);
 
-create policy if not exists "Users update own profile"
+drop policy if exists "Users update own profile" on public.profiles;
+create policy "Users update own profile"
   on public.profiles for update
   using (auth.uid() = id);
 
@@ -30,11 +33,13 @@ create table if not exists public.assets (
 
 alter table public.assets enable row level security;
 
-create policy if not exists "Users insert own assets"
+drop policy if exists "Users insert own assets" on public.assets;
+create policy "Users insert own assets"
   on public.assets for insert
   with check (auth.uid() = user_id);
 
-create policy if not exists "Users read own assets"
+drop policy if exists "Users read own assets" on public.assets;
+create policy "Users read own assets"
   on public.assets for select
   using (auth.uid() = user_id);
 

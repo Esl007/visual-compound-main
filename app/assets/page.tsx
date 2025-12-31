@@ -9,6 +9,7 @@ interface Asset {
   width: number | null;
   height: number | null;
   created_at: string;
+  signedUrl?: string;
 }
 
 export default function AssetsPage() {
@@ -33,7 +34,25 @@ export default function AssetsPage() {
         if (!res.ok) throw new Error("Failed to load assets");
         const j = (await res.json()) as { assets?: Asset[] };
         if (!mounted) return;
-        setAssets(Array.isArray(j?.assets) ? j.assets : []);
+        const baseAssets: Asset[] = Array.isArray(j?.assets) ? j.assets : [];
+        // For private buckets, obtain a signed GET URL for each asset
+        const withSigned: Asset[] = await Promise.all(
+          baseAssets.map(async (a) => {
+            try {
+              const sg = await fetch("/api/storage/sign-get", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ url: a.url, expiresIn: 60 * 5 }),
+              });
+              if (sg.ok) {
+                const j2 = await sg.json();
+                return { ...a, signedUrl: j2?.signedUrl || a.url };
+              }
+            } catch {}
+            return a;
+          })
+        );
+        setAssets(withSigned);
       } catch (e) {
         console.error(e);
         if (!mounted) return;
@@ -62,7 +81,7 @@ export default function AssetsPage() {
             {assets.map((a) => (
               <div key={a.id} className="rounded-xl overflow-hidden border border-border bg-card">
                 <div className="aspect-square bg-muted">
-                  <img src={a.url} alt={a.type || "asset"} className="w-full h-full object-cover" />
+                  <img src={a.signedUrl || a.url} alt={a.type || "asset"} className="w-full h-full object-cover" />
                 </div>
                 <div className="p-2 text-xs text-muted-foreground flex items-center justify-between">
                   <span>{a.type || "final"}</span>

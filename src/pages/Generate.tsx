@@ -46,6 +46,7 @@ export const Generate = () => {
   const [debugInfo, setDebugInfo] = useState<any | null>(null);
   const outputRef = useRef<HTMLDivElement | null>(null);
   const [zoomSrc, setZoomSrc] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -136,6 +137,74 @@ export const Generate = () => {
       console.error(e);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleManualSave = async () => {
+    if (!isAuthed) return;
+    if (!generatedImage) return;
+    setIsSaving(true);
+    setApiError(null);
+    try {
+      const dataUrl = (resultDataUrl || (Array.isArray(resultDataUrls) && resultDataUrls[0]) || uploadedImageDataUrl || null);
+      if (!dataUrl) {
+        setIsSaving(false);
+        return;
+      }
+      const mtMatch = /^data:([^;]+);base64,/i.exec(dataUrl);
+      const mimeType = mtMatch?.[1] || "image/png";
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], `manual-${Date.now()}.${mimeType.split("/").pop() || "png"}`, { type: mimeType });
+      try {
+        let presign = await requestPresign(file, { bucket: "AI-Image-Gen-3", prefix: "manual" });
+        let put = await fetch(presign.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
+        if (!put.ok) throw new Error("presign_put_failed");
+        setResultUploadedUrl(presign.fileUrl);
+        try {
+          const dims = await new Promise<{ width: number; height: number }>((resolve) => {
+            const im = new Image();
+            im.onload = () => resolve({ width: im.naturalWidth, height: im.naturalHeight });
+            im.onerror = () => resolve({ width: 0, height: 0 });
+            im.src = dataUrl;
+          });
+          await fetch("/api/assets", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ url: presign.fileUrl, type: "final", width: dims.width, height: dims.height }),
+          });
+        } catch {}
+        return;
+      } catch (_) {
+        const r = await fetch("/api/storage/save-dataurl", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ dataUrl, bucket: "AI-Image-Gen-3", prefix: "manual", contentType: mimeType }),
+        });
+        if (!r.ok) throw new Error("manual_save_failed");
+        const j = await r.json();
+        if (j?.fileUrl) {
+          setResultUploadedUrl(j.fileUrl);
+          try {
+            const dims = await new Promise<{ width: number; height: number }>((resolve) => {
+              const im = new Image();
+              im.onload = () => resolve({ width: im.naturalWidth, height: im.naturalHeight });
+              im.onerror = () => resolve({ width: 0, height: 0 });
+              im.src = dataUrl;
+            });
+            await fetch("/api/assets", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ url: j.fileUrl, type: "final", width: dims.width, height: dims.height }),
+            });
+          } catch {}
+        } else {
+          throw new Error("no_file_url");
+        }
+      }
+    } catch (e) {
+      setApiError("Manual save failed. Please try again.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -575,9 +644,23 @@ export const Generate = () => {
 
                     {/* Actions */}
                     <div className="grid grid-cols-3 gap-3">
-                      <button className="btn-secondary flex flex-col items-center gap-1 py-3">
-                        <Save className="w-5 h-5" />
-                        <span className="text-xs">Save as Product</span>
+                      <button
+                        type="button"
+                        onClick={handleManualSave}
+                        disabled={isSaving || isGenerating}
+                        className="btn-secondary flex flex-col items-center gap-1 py-3 disabled:opacity-60"
+                      >
+                        {isSaving ? (
+                          <>
+                            <RefreshCw className="w-5 h-5 animate-spin" />
+                            <span className="text-xs">Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-5 h-5" />
+                            <span className="text-xs">Save as Product</span>
+                          </>
+                        )}
                       </button>
                       <button className="btn-secondary flex flex-col items-center gap-1 py-3">
                         <RefreshCw className="w-5 h-5" />
