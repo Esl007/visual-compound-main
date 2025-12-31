@@ -25,6 +25,21 @@ async function fetchWithTimeout(url: string, opts: RequestInit & { timeoutMs?: n
   }
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const shouldRetry = (e: any) => /(?:503|429|overloaded|temporarily|unavailable|rate)/i.test(String(e?.message || e));
+async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 4) {
+  let lastErr: any;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try { return await fn(); } catch (e: any) {
+      lastErr = e;
+      if (!shouldRetry(e)) throw e;
+      const delay = 300 * Math.pow(2, attempt) + Math.floor(Math.random() * 200);
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
+}
+
 
 export async function POST(req: NextRequest) {
   try {
@@ -324,9 +339,9 @@ export async function POST(req: NextRequest) {
 
       // Try both forms of model identifier for compatibility
       try {
-        return await attempt("gemini-2.5-flash-image");
+        return await withRetry(() => attempt("gemini-2.5-flash-image"), 4);
       } catch (_) {
-        return await attempt("models/gemini-2.5-flash-image");
+        return await withRetry(() => attempt("models/gemini-2.5-flash-image"), 4);
       }
     };
 
@@ -338,12 +353,12 @@ export async function POST(req: NextRequest) {
         const target = numImages;
         const agg: Array<{ imageBase64: string; mimeType: string }> = [];
         let dbg: any = null;
-const batch = Math.min(3, Math.max(1, target));
+const batch = Math.min(2, Math.max(1, target));
 let guard = 0;
 while (agg.length < target && guard < 6) {
   const need = target - agg.length;
   const toLaunch = Math.min(batch, need);
-  const outs = await Promise.all(Array.from({ length: toLaunch }).map(() => tryGenerateRest()));
+  const outs = await Promise.all(Array.from({ length: toLaunch }).map(() => withRetry(() => tryGenerateRest(), 4)));
   for (const out of outs as any[]) {
     if (!dbg && out?.debug) dbg = out.debug;
     const imgs: Array<{ imageBase64: string; mimeType: string }> = Array.isArray(out?.images)
@@ -453,12 +468,12 @@ if (dbg) {
           const target = numImages;
           const agg: Array<{ imageBase64: string; mimeType: string }> = [];
           let dbg: any = null;
-const batch = Math.min(3, Math.max(1, target));
+const batch = Math.min(2, Math.max(1, target));
 let guard = 0;
 while (agg.length < target && guard < 6) {
   const need = target - agg.length;
   const toLaunch = Math.min(batch, need);
-  const outs = await Promise.all(Array.from({ length: toLaunch }).map(() => tryGenerateRest()));
+  const outs = await Promise.all(Array.from({ length: toLaunch }).map(() => withRetry(() => tryGenerateRest(), 4)));
   for (const out of outs as any[]) {
     if (!dbg && out?.debug) dbg = out.debug;
     const imgs: Array<{ imageBase64: string; mimeType: string }> = Array.isArray(out?.images)
