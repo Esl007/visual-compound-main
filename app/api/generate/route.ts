@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { uploadImage, cacheControlForKey, getSignedUrl } from "@/lib/storage/b2";
+import { buildUserPath, extFromMime } from "@/lib/images/paths";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -55,6 +57,7 @@ export async function POST(req: NextRequest) {
     const keepBackground: boolean | undefined = body?.keepBackground;
     const aspectRatio: string | undefined = body?.aspectRatio;
     const imageSize: "1K" | "2K" | "4K" | undefined = body?.imageSize;
+    const persist: boolean = Boolean(body?.persist);
     const numImages: number = (() => {
       const n = Number(body?.numImages);
       if (!Number.isFinite(n)) return 1;
@@ -346,6 +349,27 @@ export async function POST(req: NextRequest) {
     };
 
     const hasGuidance = Boolean(productImageDataUrl || productImageUrl);
+    const userId = session.user.id;
+    const bucket = process.env.S3_BUCKET as string;
+
+    async function persistImages(images: Array<{ imageBase64: string; mimeType: string }>) {
+      if (!images || images.length === 0) return null;
+      if (!persist) return null;
+      const stored: Array<{ id: string; storage_path: string; signed_url: string; mimeType: string }> = [];
+      for (const im of images) {
+        const mime = im.mimeType || "image/png";
+        const buf = Buffer.from(im.imageBase64, "base64");
+        const ext = extFromMime(mime);
+        const { id, key } = buildUserPath(userId, undefined, ext);
+        await uploadImage({ bucket, key, body: buf, contentType: mime, cacheControl: cacheControlForKey(key) });
+        const { error: dbErr } = await supa.from("images").insert({ id, user_id: userId, type: "user", storage_path: key, metadata: {} });
+        if (dbErr) throw dbErr;
+        const signed_url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 });
+        stored.push({ id, storage_path: key, signed_url, mimeType: mime });
+      }
+      return stored;
+    }
+
     if (hasGuidance) {
       try {
         // Guided: use generateContent REST so we can inline the product image
@@ -377,11 +401,15 @@ while (agg.length < target && guard < 6) {
 if (dbg) {
           dbg.response = { ...(dbg.response || {}), imagesCount: agg.length };
         }
-        const payload: any = {
+        const stored = persist ? await persistImages(agg) : null;
+        const stored = persist ? await persistImages(agg) : null;
+          const payload: any = {
           images: agg,
           imageBase64: agg[0]?.imageBase64,
           mimeType: agg[0]?.mimeType || "image/png",
-          debug: dbg,
+          stored: stored,
+          stored: stored,
+            debug: dbg,
         };
         return new Response(JSON.stringify(payload), {
           status: 200,
@@ -391,7 +419,9 @@ if (dbg) {
         try {
           // Fallback to images:generate (prompt-only)
           const out2 = await tryGenerateImagesApi();
-          return new Response(JSON.stringify(out2), {
+          const imgs2 = Array.isArray((out2 as any)?.images) ? (out2 as any).images : [];
+          const stored2 = persist ? await persistImages(imgs2) : null;
+          return new Response(JSON.stringify({ ...out2, stored: stored2 }), {
             status: 200,
             headers: { "content-type": "application/json" },
           });
@@ -432,7 +462,8 @@ if (dbg) {
                 response: { imagesCount: agg.length },
               },
             } as any;
-            return new Response(JSON.stringify(out3), {
+            const stored3 = persist ? await persistImages(agg) : null;
+            return new Response(JSON.stringify({ ...out3, stored: stored3 }), {
               status: 200,
               headers: { "content-type": "application/json" },
             });
@@ -458,7 +489,9 @@ if (dbg) {
       try {
         // Prompt-only: prefer direct images:generate to force image output
         const out = await tryGenerateImagesApi();
-        return new Response(JSON.stringify(out), {
+        const imgs = Array.isArray((out as any)?.images) ? (out as any).images : [];
+        const stored = persist ? await persistImages(imgs) : null;
+        return new Response(JSON.stringify({ ...out, stored }), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
@@ -537,7 +570,8 @@ if (dbg) dbg.response = { ...(dbg.response || {}), imagesCount: agg.length };
                 response: { imagesCount: agg.length },
               },
             } as any;
-            return new Response(JSON.stringify(out3), {
+            const stored3 = persist ? await persistImages(agg) : null;
+            return new Response(JSON.stringify({ ...out3, stored: stored3 }), {
               status: 200,
               headers: { "content-type": "application/json" },
             });

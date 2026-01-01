@@ -27,3 +27,7 @@ dist-ssr
 # Next.js build output
 .next
 .env*.local
+
+# Local env and supabase temp
+.env.local*
+supabase/.temp

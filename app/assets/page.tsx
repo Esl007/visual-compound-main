@@ -22,37 +22,39 @@ export default function AssetsPage() {
       const { data } = await supabaseBrowser().auth.getUser();
       if (!mounted) return;
       if (!data?.user) {
-        window.location.href = "/sign-in";
+        try {
+          const next = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/assets";
+          window.location.href = `/sign-in?next=${encodeURIComponent(next)}`;
+        } catch {
+          window.location.href = "/sign-in";
+        }
         return;
       }
       try {
-        const res = await fetch("/api/creatives", { cache: "no-store" });
+        const res = await fetch("/api/images?type=user", { cache: "no-store" });
         if (res.status === 401) {
-          window.location.href = "/sign-in";
+          try {
+            const next = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/assets";
+            window.location.href = `/sign-in?next=${encodeURIComponent(next)}`;
+          } catch {
+            window.location.href = "/sign-in";
+          }
           return;
         }
         if (!res.ok) throw new Error("Failed to load assets");
-        const j = (await res.json()) as { assets?: Asset[] };
+        const j = (await res.json()) as { items?: any[] };
         if (!mounted) return;
-        const baseAssets: Asset[] = Array.isArray(j?.assets) ? j.assets : [];
-        // For private buckets, obtain a signed GET URL for each asset
-        const withSigned: Asset[] = await Promise.all(
-          baseAssets.map(async (a) => {
-            try {
-              const sg = await fetch("/api/storage/sign-get", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ url: a.url, expiresIn: 60 * 5 }),
-              });
-              if (sg.ok) {
-                const j2 = await sg.json();
-                return { ...a, signedUrl: j2?.signedUrl || a.url };
-              }
-            } catch {}
-            return a;
-          })
-        );
-        setAssets(withSigned);
+        const items = Array.isArray(j?.items) ? j.items : [];
+        const mapped: Asset[] = items.map((row) => ({
+          id: row.id,
+          url: row.signed_url || row.storage_path,
+          type: row.type,
+          width: row.metadata?.width ?? null,
+          height: row.metadata?.height ?? null,
+          created_at: row.created_at,
+          signedUrl: row.signed_url || undefined,
+        }));
+        setAssets(mapped);
       } catch (e) {
         console.error(e);
         if (!mounted) return;
