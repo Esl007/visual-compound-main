@@ -260,6 +260,7 @@ export const Generate = () => {
           keepBackground,
           aspectRatio,
           numImages,
+          persist: true,
         }),
       });
       if (!genRes.ok) {
@@ -270,6 +271,9 @@ export const Generate = () => {
       }
       const gen = await genRes.json();
       if (gen?.debug) setDebugInfo(gen.debug);
+      if (Array.isArray(gen?.stored) && gen.stored.length > 0 && typeof gen.stored[0]?.signed_url === "string") {
+        setResultUploadedUrl(gen.stored[0].signed_url);
+      }
       const mimeType: string = gen?.mimeType || "image/png";
       const imagesArr: Array<{ imageBase64?: string; mimeType?: string }> = Array.isArray(gen?.images)
         ? gen.images
