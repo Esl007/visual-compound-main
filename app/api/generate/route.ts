@@ -402,12 +402,10 @@ if (dbg) {
           dbg.response = { ...(dbg.response || {}), imagesCount: agg.length };
         }
         const stored = persist ? await persistImages(agg) : null;
-        const stored = persist ? await persistImages(agg) : null;
           const payload: any = {
           images: agg,
           imageBase64: agg[0]?.imageBase64,
           mimeType: agg[0]?.mimeType || "image/png",
-          stored: stored,
           stored: stored,
             debug: dbg,
         };
