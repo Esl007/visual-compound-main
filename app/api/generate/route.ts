@@ -363,7 +363,9 @@ export async function POST(req: NextRequest) {
         const { id, key } = buildUserPath(userId, undefined, ext);
         await uploadImage({ bucket, key, body: buf, contentType: mime, cacheControl: cacheControlForKey(key) });
         const { error: dbErr } = await supa.from("images").insert({ id, user_id: userId, type: "user", storage_path: key, metadata: {} });
-        if (dbErr) throw dbErr;
+        if (dbErr) {
+          console.warn("images insert failed; continuing without DB row:", (dbErr as any)?.message || dbErr);
+        }
         const signed_url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 });
         stored.push({ id, storage_path: key, signed_url, mimeType: mime });
       }
@@ -466,17 +468,11 @@ if (dbg) {
               headers: { "content-type": "application/json" },
             });
           } catch (e3: any) {
-            const key = cleanEnv(process.env.GOOGLE_API_KEY) || "";
-            const keyPrefix = key ? key.slice(0, 6) : "";
             return new Response(
               JSON.stringify({
                 error: "Google AI image generation failed",
                 detail: e3?.message || e2?.message || e1?.message,
                 model: "gemini-2.5-flash-image",
-                env: {
-                  googleApiKeyPrefix: keyPrefix,
-                  hasKey: Boolean(key),
-                },
               }),
               { status: 500 },
             );
@@ -574,17 +570,11 @@ if (dbg) dbg.response = { ...(dbg.response || {}), imagesCount: agg.length };
               headers: { "content-type": "application/json" },
             });
           } catch (e3: any) {
-            const key = cleanEnv(process.env.GOOGLE_API_KEY) || "";
-            const keyPrefix = key ? key.slice(0, 6) : "";
             return new Response(
               JSON.stringify({
                 error: "Google AI image generation failed",
                 detail: e3?.message || e2?.message || e1?.message,
                 model: "gemini-2.5-flash-image",
-                env: {
-                  googleApiKeyPrefix: keyPrefix,
-                  hasKey: Boolean(key),
-                },
               }),
               { status: 500 },
             );

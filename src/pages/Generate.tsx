@@ -264,8 +264,14 @@ export const Generate = () => {
         }),
       });
       if (!genRes.ok) {
-        const errText = await genRes.text();
-        setApiError(errText);
+        let msg = "Image generation failed. Please try again.";
+        try {
+          const j = await genRes.json();
+          if (j && typeof j.error === "string" && j.error) msg = j.error;
+        } catch {
+          // ignore parse error; use generic message
+        }
+        setApiError(msg);
         setIsGenerating(false);
         return;
       }

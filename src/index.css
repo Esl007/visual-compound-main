@@ -172,7 +172,11 @@
   .input-field {
     @apply w-full bg-background border border-border rounded-lg px-4 py-3 transition-all duration-200;
     @apply focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary;
-    @apply placeholder:text-muted-foreground;
+  }
+
+  .input-field::placeholder {
+    color: hsl(var(--text-secondary));
+    opacity: 0.9;
   }
 
   .glass {

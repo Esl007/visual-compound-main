@@ -21,7 +21,14 @@ export async function GET(req: NextRequest) {
       query = query.eq("type", type);
     }
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) {
+      const msg = String((error as any)?.message || error);
+      // If migration not applied yet, avoid hard-failing and return an empty list
+      if (/Could not find the table|schema cache/i.test(msg)) {
+        return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      throw error;
+    }
 
     const bucket = process.env.S3_BUCKET as string;
     if (!bucket) return new Response(JSON.stringify({ error: "Missing S3_BUCKET" }), { status: 500 });
