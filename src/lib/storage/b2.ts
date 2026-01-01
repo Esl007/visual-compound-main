@@ -56,6 +56,7 @@ export async function getSignedUrl(params: { bucket: string; key: string; expire
 
 export function cacheControlForKey(key: string) {
   if (key.startsWith("templates/")) return "public, max-age=31536000, immutable";
-  if (key.startsWith("users/")) return "private, max-age=3600";
+  // Long-lived CDN caching for user images. Objects are immutable by id, so safe to cache long on CDN.
+  if (key.startsWith("users/")) return "public, max-age=31536000, immutable";
   return undefined;
 }
