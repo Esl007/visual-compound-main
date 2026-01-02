@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
     const id = randomUUID();
     const title: string = body?.title || "Untitled";
     const category: string = body?.category || "General";
+    const category_id: string | null = body?.category_id ?? null;
     const background_prompt: string | null = body?.background_prompt ?? null;
     const product_prompt: string | null = body?.product_prompt ?? null;
     const featured: boolean = Boolean(body?.featured);
@@ -24,6 +25,7 @@ export async function POST(req: NextRequest) {
       id,
       title,
       category,
+      category_id,
       background_prompt,
       product_prompt,
       status: "draft",
