@@ -18,12 +18,27 @@ export async function POST(req: NextRequest) {
   const adminToken = process.env.ADMIN_UPLOAD_TOKEN;
   if (!adminToken) return new Response(JSON.stringify({ error: "Missing ADMIN_UPLOAD_TOKEN" }), { status: 500 });
   const headerToken = req.headers.get("x-admin-token");
-  if (headerToken !== adminToken) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
-  const body = await req.json();
-  const name = String(body?.name || "").trim();
+  const cookieToken = req.cookies.get("admin-token")?.value;
+  if (headerToken !== adminToken && cookieToken !== adminToken) {
+    return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+  }
+
+  let name = "";
+  const ctype = req.headers.get("content-type") || "";
+  if (ctype.includes("application/json")) {
+    const body = await req.json();
+    name = String(body?.name || "").trim();
+  } else {
+    const fd = await req.formData();
+    name = String(fd.get("name") || "").trim();
+  }
   if (!name) return new Response(JSON.stringify({ error: "Name required" }), { status: 400 });
   const supa = supabaseAdmin();
-  const { data, error } = await supa.from("template_categories").insert({ id: randomUUID(), name }).select("id,name").single();
+  const { data, error } = await supa
+    .from("template_categories")
+    .insert({ id: randomUUID(), name })
+    .select("id,name")
+    .single();
   if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
   return new Response(JSON.stringify(data), { status: 200, headers: { "content-type": "application/json" } });
 }

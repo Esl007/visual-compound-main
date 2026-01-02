@@ -38,6 +38,7 @@ async function publishAction(formData: FormData) {
   } else {
     await supa.from("templates").update({ status, updated_at: new Date().toISOString() }).eq("id", id);
   }
+  revalidatePath("/admin/templates");
 }
 
 async function toggleFeaturedAction(formData: FormData) {
@@ -47,6 +48,7 @@ async function toggleFeaturedAction(formData: FormData) {
   if (!id) return;
   const supa = supabaseAdmin();
   await supa.from("templates").update({ featured }).eq("id", id);
+  revalidatePath("/admin/templates");
 }
 
 async function createTemplateAction(formData: FormData) {
@@ -54,7 +56,7 @@ async function createTemplateAction(formData: FormData) {
   const id = randomUUID();
   const title = String(formData.get("title") || "Untitled");
   const category_id = formData.get("category_id") ? String(formData.get("category_id")) : null;
-  const category = formData.get("category") ? String(formData.get("category")) : "General"; // fallback for legacy
+  let category = formData.get("category") ? String(formData.get("category")) : "General"; // fallback for legacy
   const background_prompt = formData.get("background_prompt") ? String(formData.get("background_prompt")) : null;
   const product_prompt = formData.get("product_prompt") ? String(formData.get("product_prompt")) : null;
   const featured = String(formData.get("featured") || "false") === "true";
@@ -65,6 +67,12 @@ async function createTemplateAction(formData: FormData) {
   let previewPath: string | null = null;
   let t400: string | null = null;
   let t600: string | null = null;
+  // If a category_id is provided, resolve its name and mirror it to the legacy 'category' column
+  if (category_id) {
+    const { data: cat } = await supa.from("template_categories").select("name").eq("id", category_id).single();
+    if (cat?.name) category = cat.name;
+  }
+
   if (bucket) {
     const bg = formData.get("background") as unknown as File | null;
     if (bg) {
@@ -198,6 +206,22 @@ export default async function Page() {
     );
   }
   const supa = supabaseAdmin();
+  try {
+    const defaults = [
+      "Hero Shot",
+      "Lifestyle",
+      "Studio",
+      "Minimal Product",
+      "Outdoor",
+    ];
+    const { data: existing } = await supa.from("template_categories").select("name");
+    const existingSet = new Set((existing || []).map((r: any) => String(r.name).trim().toLowerCase()));
+    const toInsert = defaults
+      .filter((n) => !existingSet.has(n.toLowerCase()))
+      .map((name) => ({ id: randomUUID(), name }));
+    if (toInsert.length) await supa.from("template_categories").insert(toInsert);
+  } catch (_) {
+  }
   const { data: categories } = await supa
     .from("template_categories")
     .select("id,name")
@@ -224,7 +248,8 @@ export default async function Page() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Admin Templates</h1>
         <Link className="px-3 py-2 rounded border text-sm bg-white text-black hover:bg-gray-50" href="/templates">View Public Templates</Link>
-      <div className="rounded border p-4 mt-4">
+      </div>
+      <div className="rounded border p-4">
         <form action={addCategoryAction} className="flex items-center gap-2 mb-4">
           <label className="block text-sm">Add Category</label>
           <input name="name" placeholder="New category name" className="px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
@@ -237,12 +262,16 @@ export default async function Page() {
           </div>
           <div>
             <label className="block text-sm mb-1">Category</label>
-            <select name="category_id" className="w-full px-3 py-2 border rounded bg-white text-black">
-              <option value="">Select a category</option>
-              {(categories || []).map((c: any) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            {((categories || []).length > 0) ? (
+              <select name="category_id" className="w-full px-3 py-2 border rounded bg-white text-black">
+                <option value="">Select a category</option>
+                {(categories || []).map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            ) : (
+              <input name="category" placeholder="Category" className="w-full px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
+            )}
           </div>
           <div className="md:col-span-2">
             <label className="block text-sm mb-1">Background Prompt</label>
@@ -271,7 +300,6 @@ export default async function Page() {
             <button type="submit" className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Create Draft</button>
           </div>
         </form>
-      </div>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
@@ -310,6 +338,11 @@ export default async function Page() {
                       <option value="archived">archived</option>
                     </select>
                     <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Update</button>
+                  </form>
+                  <form action={publishAction} className="mt-2">
+                    <input type="hidden" name="id" value={t.id} />
+                    <input type="hidden" name="status" value="published" />
+                    <button type="submit" className="px-3 py-1.5 rounded bg-green-600 text-white text-sm hover:bg-green-700">Publish</button>
                   </form>
                 </td>
                 <td className="p-2">
