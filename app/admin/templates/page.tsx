@@ -4,7 +4,7 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-export async function publishAction(formData: FormData) {
+async function publishAction(formData: FormData) {
   "use server";
   const id = String(formData.get("id") || "");
   const status = String(formData.get("status") || "");
@@ -13,7 +13,7 @@ export async function publishAction(formData: FormData) {
   await supa.from("templates").update({ status }).eq("id", id);
 }
 
-export async function toggleFeaturedAction(formData: FormData) {
+async function toggleFeaturedAction(formData: FormData) {
   "use server";
   const id = String(formData.get("id") || "");
   const featured = String(formData.get("featured") || "false") === "true";
