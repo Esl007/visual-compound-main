@@ -1,30 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { LayoutTemplate, Star, Check } from "lucide-react";
+import { useRouter } from "next/navigation";
 
-interface Template {
-  id: number;
-  name: string;
+interface TemplateItem {
+  id: string;
+  title: string;
   category: string;
-  popular?: boolean;
+  featured?: boolean;
+  preview_url?: string;
+  thumb_400_url?: string;
+  thumb_600_url?: string;
 }
-
-const categories = ["All", "Hero Shots", "Lifestyle", "Marketplace", "Ads", "Social"];
-
-const templates: Template[] = [
-  { id: 1, name: "Clean Studio", category: "Hero Shots", popular: true },
-  { id: 2, name: "Marble Surface", category: "Hero Shots" },
-  { id: 3, name: "Natural Light", category: "Lifestyle", popular: true },
-  { id: 4, name: "Office Desk", category: "Lifestyle" },
-  { id: 5, name: "Kitchen Counter", category: "Lifestyle" },
-  { id: 6, name: "Amazon Standard", category: "Marketplace", popular: true },
-  { id: 7, name: "Etsy Aesthetic", category: "Marketplace" },
-  { id: 8, name: "eBay Clean", category: "Marketplace" },
-  { id: 9, name: "Instagram Story", category: "Social", popular: true },
-  { id: 10, name: "Facebook Feed", category: "Social" },
-  { id: 11, name: "Banner Ad", category: "Ads" },
-  { id: 12, name: "Square Ad", category: "Ads", popular: true },
-];
 
 const container = {
   hidden: { opacity: 0 },
@@ -40,12 +27,35 @@ const item = {
 };
 
 export const Templates = () => {
+  const router = useRouter();
   const [activeCategory, setActiveCategory] = useState("All");
-  const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [items, setItems] = useState<TemplateItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredTemplates = activeCategory === "All" 
-    ? templates 
-    : templates.filter(t => t.category === activeCategory);
+  useEffect(() => {
+    let aborted = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const res = await fetch("/api/templates");
+        if (!res.ok) throw new Error("Failed to load templates");
+        const j = await res.json();
+        if (!aborted) setItems(Array.isArray(j?.items) ? j.items : []);
+      } catch (e: any) {
+        if (!aborted) setError("Could not load templates");
+      } finally {
+        if (!aborted) setLoading(false);
+      }
+    })();
+    return () => {
+      aborted = true;
+    };
+  }, []);
+
+  const categories = ["All", ...Array.from(new Set(items.map((t) => t.category)))];
+  const filteredTemplates = activeCategory === "All" ? items : items.filter((t) => t.category === activeCategory);
 
   return (
     <div className="min-h-screen p-8 lg:p-12">
@@ -100,10 +110,18 @@ export const Templates = () => {
             >
               {/* Preview */}
               <div className="aspect-[4/3] bg-muted relative overflow-hidden">
-                <div className="w-full h-full bg-gradient-to-br from-primary/5 via-secondary to-accent/10 group-hover:scale-105 transition-transform duration-500" />
+                {template.thumb_400_url || template.preview_url ? (
+                  <img
+                    src={template.thumb_400_url || template.preview_url || ""}
+                    alt={template.title}
+                    className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-primary/5 via-secondary to-accent/10 group-hover:scale-105 transition-transform duration-500" />
+                )}
                 
                 {/* Popular Badge */}
-                {template.popular && (
+                {template.featured && (
                   <div className="absolute top-3 left-3 bg-accent text-accent-foreground px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1">
                     <Star className="w-3 h-3" />
                     Popular
@@ -120,7 +138,7 @@ export const Templates = () => {
                 {/* Hover Overlay */}
                 <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/5 transition-colors duration-300 flex items-center justify-center">
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <button className="btn-primary text-sm px-4 py-2">
+                    <button className="btn-primary text-sm px-4 py-2" onClick={(e) => { e.stopPropagation(); router.push(`/generate?templateId=${template.id}`); }}>
                       Use Template
                     </button>
                   </div>
@@ -129,7 +147,7 @@ export const Templates = () => {
 
               {/* Info */}
               <div className="p-4">
-                <h3 className="font-medium text-foreground">{template.name}</h3>
+                <h3 className="font-medium text-foreground">{template.title}</h3>
                 <p className="text-sm text-muted-foreground">{template.category}</p>
               </div>
             </motion.div>
@@ -137,7 +155,11 @@ export const Templates = () => {
         </motion.div>
 
         {/* Empty State */}
-        {filteredTemplates.length === 0 && (
+        {loading ? (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16 text-muted-foreground">
+            Loading templates...
+          </motion.div>
+        ) : filteredTemplates.length === 0 ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -149,7 +171,7 @@ export const Templates = () => {
             <h3 className="text-lg font-medium text-foreground mb-1">No templates in this category</h3>
             <p className="text-muted-foreground">Check back soon for new templates</p>
           </motion.div>
-        )}
+        ) : null}
       </motion.div>
     </div>
   );

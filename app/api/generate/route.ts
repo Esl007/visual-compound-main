@@ -5,7 +5,6 @@ import { uploadImage, cacheControlForKey, getSignedUrl } from "@/lib/storage/b2"
 import { buildUserPath, extFromMime } from "@/lib/images/paths";
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
 function cleanEnv(v?: string) {
   if (!v) return v as any;
   let out = v.trim();
@@ -14,7 +13,6 @@ function cleanEnv(v?: string) {
   }
   return out;
 }
-
 // Abort long-running fetches to avoid hanging external calls
 async function fetchWithTimeout(url: string, opts: RequestInit & { timeoutMs?: number } = {}) {
   const { timeoutMs = 45000, ...rest } = opts as any;
@@ -26,7 +24,6 @@ async function fetchWithTimeout(url: string, opts: RequestInit & { timeoutMs?: n
     clearTimeout(id);
   }
 }
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const shouldRetry = (e: any) => /(?:503|429|overloaded|temporarily|unavailable|rate)/i.test(String(e?.message || e));
 async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 4) {
@@ -41,8 +38,6 @@ async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 4) {
   }
   throw lastErr;
 }
-
-
 export async function POST(req: NextRequest) {
   try {
     const supa = supabaseServer();
@@ -58,28 +53,58 @@ export async function POST(req: NextRequest) {
     const aspectRatio: string | undefined = body?.aspectRatio;
     const imageSize: "1K" | "2K" | "4K" | undefined = body?.imageSize;
     const persist: boolean = Boolean(body?.persist);
+    const templateId: string | undefined = body?.templateId;
     const numImages: number = (() => {
       const n = Number(body?.numImages);
       if (!Number.isFinite(n)) return 1;
       return Math.max(1, Math.min(6, Math.floor(n)));
     })();
-
     const GOOGLE_API_KEY = cleanEnv(process.env.GOOGLE_API_KEY);
     if (!GOOGLE_API_KEY) {
       return new Response(JSON.stringify({ error: "Missing GOOGLE_API_KEY" }), { status: 500 });
     }
-    if (!prompt && !productImageUrl) {
+    if (!prompt && !productImageUrl && !templateId) {
       return new Response(JSON.stringify({ error: "Provide prompt or productImageUrl" }), { status: 400 });
     }
-
     const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
+    let templateImageDataUrl: string | null = null;
+let templateProductPrompt: string | null = null;
+if (templateId) {
+  try {
+    const { data: trow } = await supa
+      .from("templates")
+      .select("background_image_path, background_prompt, product_prompt")
+      .eq("id", templateId)
+      .single();
+    if (trow?.background_image_path) {
+      const bucketT = process.env.S3_BUCKET as string;
+      const signedBg = await getSignedUrl({ bucket: bucketT, key: trow.background_image_path, expiresInSeconds: 300 });
+      const resBg = await fetch(signedBg);
+      if (resBg.ok) {
+        const buf = Buffer.from(await resBg.arrayBuffer());
+        templateImageDataUrl = `data:image/png;base64,${buf.toString("base64")}`;
+      }
+    }
+    if (trow?.product_prompt) templateProductPrompt = String(trow.product_prompt);
+  } catch {}
+}
 
+const inlineDataUrl = templateImageDataUrl || productImageDataUrl || null;
+const keepBg = templateId ? true : Boolean(keepBackground);
+const combinedPrompt = (() => {
+  const parts: string[] = [];
+  if (templateProductPrompt && String(templateProductPrompt).trim()) parts.push(String(templateProductPrompt).trim());
+  if (prompt && String(prompt).trim()) parts.push(String(prompt).trim());
+  return parts.join(" ");
+})();
+
+;
     // Try primary Imagen 3 model name
     const tryGenerate = async (modelName: string) => {
       const model = genAI.getGenerativeModel({ model: modelName });
       let imgPart: any = null;
-      if (productImageDataUrl || productImageUrl) {
-        const source = productImageDataUrl || productImageUrl!;
+      if (inlineDataUrl || productImageUrl) {
+        const source = inlineDataUrl || productImageUrl!;
         if (source.startsWith("data:")) {
           const idx = source.indexOf(",");
           const meta = source.slice(5, idx);
@@ -114,7 +139,7 @@ export async function POST(req: NextRequest) {
           {
             role: "user",
             parts: [
-              { text: `${prompt || "Product visual"}${keepBackground ? " (keep background consistent)" : ""}` },
+              { text: `${combinedPrompt || "Product visual"}${keepBg ? " (keep background consistent)" : ""}` },
               // Note: productImageUrl is not directly inlined due to SDK file API requirements.
               // This implementation focuses on text-to-image.
               ...(imgPart ? [imgPart] : []),
@@ -125,7 +150,6 @@ export async function POST(req: NextRequest) {
           imageConfig: { aspectRatio: ar }
         } as any,
       });
-
       const candidates = (result as any)?.response?.candidates || [];
       const images: Array<{ imageBase64: string; mimeType: string }> = [];
       for (const c of candidates) {
@@ -141,11 +165,10 @@ export async function POST(req: NextRequest) {
       }
       throw new Error("No image content returned by Google AI");
     };
-
     const tryGenerateRest = async () => {
       let imgPart: any = null;
-      if (productImageDataUrl || productImageUrl) {
-        const source = productImageDataUrl || productImageUrl!;
+      if (inlineDataUrl || productImageUrl) {
+        const source = inlineDataUrl || productImageUrl!;
         if (source.startsWith("data:")) {
           const idx = source.indexOf(",");
           const meta = source.slice(5, idx);
@@ -175,7 +198,7 @@ export async function POST(req: NextRequest) {
       }
       const arSet = new Set(["1:1", "16:9", "9:16"]);
       const ar = arSet.has(aspectRatio || "") ? (aspectRatio as string) : "1:1";
-      const promptText = `${prompt || "Product visual"}${keepBackground ? " (keep background consistent)" : ""}`;
+      const promptText = `${combinedPrompt || "Product visual"}${keepBg ? " (keep background consistent)" : ""}`;
       const debug: any = {
         endpoint: "generateContent:REST",
         request: {
@@ -249,12 +272,10 @@ export async function POST(req: NextRequest) {
       }
       throw new Error("No image content returned by REST endpoint");
     };
-
     const tryGenerateImagesApi = async () => {
       const arSet = new Set(["1:1", "16:9", "9:16"]);
       const ar = arSet.has(aspectRatio || "") ? (aspectRatio as string) : "1:1";
-      const promptText = `${prompt || "Product visual"}${keepBackground ? " (keep background consistent)" : ""}`;
-
+      const promptText = `${combinedPrompt || "Product visual"}${keepBg ? " (keep background consistent)" : ""}`;
       const url = "https://generativelanguage.googleapis.com/v1beta/images:generate";
       const attempt = async (modelId: string) => {
         const debug: any = {
@@ -339,7 +360,6 @@ export async function POST(req: NextRequest) {
         }
         throw new Error("images:generate response contained no image data");
       };
-
       // Try both forms of model identifier for compatibility
       try {
         return await withRetry(() => attempt("gemini-2.5-flash-image"), 4);
@@ -347,11 +367,9 @@ export async function POST(req: NextRequest) {
         return await withRetry(() => attempt("models/gemini-2.5-flash-image"), 4);
       }
     };
-
-    const hasGuidance = Boolean(productImageDataUrl || productImageUrl);
+    const hasGuidance = Boolean(inlineDataUrl || productImageUrl);
     const userId = session.user.id;
     const bucket = process.env.S3_BUCKET as string;
-
     async function persistImages(images: Array<{ imageBase64: string; mimeType: string }>) {
       if (!images || images.length === 0) return null;
       if (!persist) return null;
@@ -371,7 +389,6 @@ export async function POST(req: NextRequest) {
       }
       return stored;
     }
-
     if (hasGuidance) {
       try {
         // Guided: use generateContent REST so we can inline the product image
@@ -430,7 +447,7 @@ if (dbg) {
             // Last resort: SDK with aggregation to honor numImages
             const arSet = new Set(["1:1", "16:9", "9:16"]);
             const ar = arSet.has(aspectRatio || "") ? (aspectRatio as string) : "1:1";
-            const promptText = `${prompt || "Product visual"}${keepBackground ? " (keep background consistent)" : ""}`;
+            const promptText = `${combinedPrompt || "Product visual"}${keepBg ? " (keep background consistent)" : ""}`;
             const target = numImages;
             const agg: Array<{ imageBase64: string; mimeType: string }> = [];
             for (let i = 0; i < target; i++) {
@@ -532,7 +549,7 @@ if (dbg) dbg.response = { ...(dbg.response || {}), imagesCount: agg.length };
             // Last resort: SDK; aggregate to numImages
             const arSet = new Set(["1:1", "16:9", "9:16"]);
             const ar = arSet.has(aspectRatio || "") ? (aspectRatio as string) : "1:1";
-            const promptText = `${prompt || "Product visual"}${keepBackground ? " (keep background consistent)" : ""}`;
+            const promptText = `${combinedPrompt || "Product visual"}${keepBg ? " (keep background consistent)" : ""}`;
             const target = numImages;
             const agg: Array<{ imageBase64: string; mimeType: string }> = [];
             for (let i = 0; i < target; i++) {

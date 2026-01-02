@@ -20,3 +20,14 @@ export function buildTemplatePath(category: string, templateId?: string, ext = "
   const cleanCat = category.replace(/[^a-z0-9-_\/]/gi, "-");
   return { id, key: `templates/${cleanCat}/${id}.${ext}` };
 }
+
+export function buildTemplateAssetPaths(templateId: string) {
+  const base = `templates/${templateId}`;
+  return {
+    base,
+    original: `${base}/original.png`,
+    preview: `${base}/preview.png`,
+    thumb400: `${base}/thumb_400.webp`,
+    thumb600: `${base}/thumb_600.webp`,
+  } as const;
+}

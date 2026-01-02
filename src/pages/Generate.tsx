@@ -25,6 +25,7 @@ export const Generate = () => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const templateId = (searchParams?.get("templateId") as string | null) || null;
   const [isAuthed, setIsAuthed] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState((searchParams?.get("tab") as string | null) || "prompt");
   const [prompt, setPrompt] = useState("");
@@ -257,10 +258,11 @@ export const Generate = () => {
           prompt: activeTab === "prompt" ? prompt : sceneDescription || prompt,
           productImageUrl: activeTab === "product" ? uploadedImageUrl : undefined,
           productImageDataUrl: activeTab === "product" ? uploadedImageDataUrl : undefined,
-          keepBackground,
+          keepBackground: templateId ? true : keepBackground,
           aspectRatio,
           numImages,
           persist: true,
+          templateId: templateId || undefined,
         }),
       });
       if (!genRes.ok) {
