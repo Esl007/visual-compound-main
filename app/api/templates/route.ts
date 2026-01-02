@@ -1,32 +1,56 @@
 import { NextRequest } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getSignedUrl } from "@/lib/storage/b2";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   try {
-    const supa = supabaseServer();
+    let supa: ReturnType<typeof supabaseServer> | ReturnType<typeof supabaseAdmin>;
+    try {
+      supa = supabaseServer();
+    } catch {
+      supa = supabaseAdmin();
+    }
     const { searchParams } = new URL(req.url);
     const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") || 50)));
     const from = Math.max(0, Number(searchParams.get("from") || 0));
 
-    let q = supa
-      .from("templates")
-      .select("id,title,category,preview_image_path,thumbnail_400_path,thumbnail_600_path,featured,created_at")
-      .eq("status", "published")
-      .order("featured", { ascending: false })
-      .order("created_at", { ascending: false })
-      .range(from, from + limit - 1);
-
-    const { data, error } = await q;
-    if (error) {
-      const msg = String((error as any)?.message || error);
-      if (/Could not find the table|schema cache/i.test(msg)) {
-        return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { "content-type": "application/json" } });
+    async function loadTemplates() {
+      try {
+        const q = (supa as any)
+          .from("templates")
+          .select("id,title,category,preview_image_path,thumbnail_400_path,thumbnail_600_path,featured,created_at")
+          .eq("status", "published")
+          .order("featured", { ascending: false })
+          .order("created_at", { ascending: false })
+          .range(from, from + limit - 1);
+        const { data, error } = await q;
+        if (error) throw error;
+        return data || [];
+      } catch (err: any) {
+        const msg = String(err?.message || err || "");
+        if (/unauthor/i.test(msg) || /invalid api key/i.test(msg) || /Missing NEXT_PUBLIC_SUPABASE_URL/i.test(msg)) {
+          const supa2 = supabaseAdmin();
+          const { data: data2, error: err2 } = await (supa2 as any)
+            .from("templates")
+            .select("id,title,category,preview_image_path,thumbnail_400_path,thumbnail_600_path,featured,created_at")
+            .eq("status", "published")
+            .order("featured", { ascending: false })
+            .order("created_at", { ascending: false })
+            .range(from, from + limit - 1);
+          if (err2) throw err2;
+          return data2 || [];
+        }
+        if (/Could not find the table|schema cache/i.test(msg)) {
+          return [];
+        }
+        throw err;
       }
-      throw error;
     }
+
+    const data = await loadTemplates();
 
     const bucket = process.env.S3_BUCKET as string;
     if (!bucket) return new Response(JSON.stringify({ error: "Missing S3_BUCKET" }), { status: 500 });

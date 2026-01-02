@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getSignedUrl } from "@/lib/storage/b2";
 import Link from "next/link";
+import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,16 @@ async function toggleFeaturedAction(formData: FormData) {
 }
 
 export default async function Page() {
+  const token = cookies().get("admin-token")?.value || "";
+  const adminToken = process.env.ADMIN_UPLOAD_TOKEN || "";
+  if (!adminToken || token !== adminToken) {
+    return (
+      <div className="p-8">
+        <h1 className="text-xl font-semibold">Forbidden</h1>
+        <p className="text-muted-foreground mt-2">Missing or invalid admin token.</p>
+      </div>
+    );
+  }
   const supa = supabaseAdmin();
   const { data } = await supa
     .from("templates")
