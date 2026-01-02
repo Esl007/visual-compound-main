@@ -168,6 +168,14 @@ export default async function Page() {
             <label className="block text-sm mb-1">Product Prompt</label>
             <input name="product_prompt" placeholder="Product prompt" className="w-full px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
           </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm mb-1">Background Image</label>
+            <input type="file" name="background" accept="image/*" className="w-full border rounded px-2 py-1 text-sm bg-white text-black" />
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm mb-1">BG+Product Image (Composite)</label>
+            <input type="file" name="composite" accept="image/*" className="w-full border rounded px-2 py-1 text-sm bg-white text-black" />
+          </div>
           <div className="flex items-center gap-2">
             <label className="text-sm">Featured</label>
             <select name="featured" defaultValue="false" className="px-3 py-2 border rounded bg-white text-black">
@@ -233,17 +241,17 @@ export default async function Page() {
                 <td className="p-2 space-y-2">
                   <form action={uploadBackgroundAction} className="flex items-center gap-2" encType="multipart/form-data">
                     <input type="hidden" name="id" value={t.id} />
-                    <input type="file" name="background" accept="image/*" className="block text-sm" />
+                    <input type="file" name="background" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
                     <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG</button>
                   </form>
                   <form action={uploadPreviewAction} className="flex items-center gap-2" encType="multipart/form-data">
                     <input type="hidden" name="id" value={t.id} />
-                    <input type="file" name="preview" accept="image/*" className="block text-sm" />
+                    <input type="file" name="preview" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
                     <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Preview</button>
                   </form>
                   <form action={uploadCompositeAction} className="flex items-center gap-2" encType="multipart/form-data">
                     <input type="hidden" name="id" value={t.id} />
-                    <input type="file" name="composite" accept="image/*" className="block text-sm" />
+                    <input type="file" name="composite" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
                     <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG+Product</button>
                   </form>
                   <Link className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700" href={`/generate?templateId=${t.id}`}>Use</Link>
