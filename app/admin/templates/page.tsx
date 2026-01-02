@@ -38,6 +38,27 @@ async function createTemplateAction(formData: FormData) {
   const featured = String(formData.get("featured") || "false") === "true";
   const supa = supabaseAdmin();
   await supa.from("templates").insert({ id, title, category, background_prompt, product_prompt, status: "draft", featured });
+  const bucket = process.env.S3_BUCKET as string;
+  if (bucket) {
+    const bg = formData.get("background") as unknown as File | null;
+    if (bg) {
+      const buf = Buffer.from(await (bg as File).arrayBuffer());
+      const png = await reencodeToPng(buf);
+      const paths = buildTemplateAssetPaths(id);
+      await uploadImage({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
+    }
+    const comp = formData.get("composite") as unknown as File | null;
+    if (comp) {
+      const buf2 = Buffer.from(await (comp as File).arrayBuffer());
+      const png2 = await reencodeToPng(buf2);
+      const paths2 = buildTemplateAssetPaths(id);
+      await uploadImage({ bucket, key: paths2.preview, body: png2, contentType: "image/png", cacheControl: cacheControlForKey(paths2.preview) });
+      const thumbs = await generateAndUploadThumbnails({ input: png2, bucket, outputBasePath: paths2.base });
+      const t400 = thumbs.find((t) => t.size === 400)?.path || null;
+      const t600 = thumbs.find((t) => t.size === 600)?.path || null;
+      await supa.from("templates").update({ preview_image_path: paths2.preview, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() }).eq("id", id);
+    }
+  }
   revalidatePath("/admin/templates");
 }
 
@@ -76,6 +97,26 @@ async function uploadPreviewAction(formData: FormData) {
   revalidatePath("/admin/templates");
 }
 
+async function uploadCompositeAction(formData: FormData) {
+  "use server";
+  const id = String(formData.get("id") || "");
+  const file = formData.get("composite") as unknown as File | null;
+  if (!id || !file) return;
+  const bucket = process.env.S3_BUCKET as string;
+  if (!bucket) return;
+  const buf = Buffer.from(await (file as File).arrayBuffer());
+  const png = await reencodeToPng(buf);
+  const paths = buildTemplateAssetPaths(id);
+  await uploadImage({ bucket, key: paths.preview, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.preview) });
+  const thumbs = await generateAndUploadThumbnails({ input: png, bucket, outputBasePath: paths.base });
+  const t400 = thumbs.find((t) => t.size === 400)?.path || null;
+  const t600 = thumbs.find((t) => t.size === 600)?.path || null;
+  const supa = supabaseAdmin();
+  await supa.from("templates").update({ preview_image_path: paths.preview, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() }).eq("id", id);
+  revalidatePath("/admin/templates");
+}
+
+
 
 export default async function Page() {
   const token = cookies().get("admin-token")?.value || "";
@@ -108,34 +149,34 @@ export default async function Page() {
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Admin Templates</h1>
-        <Link className="btn" href="/templates">View Public Templates</Link>
+        <Link className="px-3 py-2 rounded border text-sm bg-white text-black hover:bg-gray-50" href="/templates">View Public Templates</Link>
       <div className="rounded border p-4 mt-4">
-        <form action={createTemplateAction} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+        <form action={createTemplateAction} encType="multipart/form-data" className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
           <div className="md:col-span-2">
             <label className="block text-sm mb-1">Title</label>
-            <input name="title" placeholder="Title" className="input w-full" />
+            <input name="title" placeholder="Title" className="w-full px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
           </div>
           <div>
             <label className="block text-sm mb-1">Category</label>
-            <input name="category" placeholder="Category" className="input w-full" />
+            <input name="category" placeholder="Category" className="w-full px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
           </div>
           <div className="md:col-span-2">
             <label className="block text-sm mb-1">Background Prompt</label>
-            <input name="background_prompt" placeholder="Background prompt" className="input w-full" />
+            <input name="background_prompt" placeholder="Background prompt" className="w-full px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
           </div>
           <div>
             <label className="block text-sm mb-1">Product Prompt</label>
-            <input name="product_prompt" placeholder="Product prompt" className="input w-full" />
+            <input name="product_prompt" placeholder="Product prompt" className="w-full px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
           </div>
           <div className="flex items-center gap-2">
             <label className="text-sm">Featured</label>
-            <select name="featured" defaultValue="false" className="select">
+            <select name="featured" defaultValue="false" className="px-3 py-2 border rounded bg-white text-black">
               <option value="false">false</option>
               <option value="true">true</option>
             </select>
           </div>
           <div>
-            <button type="submit" className="btn">Create Draft</button>
+            <button type="submit" className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Create Draft</button>
           </div>
         </form>
       </div>
@@ -171,36 +212,41 @@ export default async function Page() {
                 <td className="p-2">
                   <form action={publishAction} className="flex items-center gap-2">
                     <input type="hidden" name="id" value={t.id} />
-                    <select name="status" defaultValue={t.status} className="select select-sm">
+                    <select name="status" defaultValue={t.status} className="px-2 py-1 border rounded bg-white text-black text-sm">
                       <option value="draft">draft</option>
                       <option value="published">published</option>
                       <option value="archived">archived</option>
                     </select>
-                    <button type="submit" className="btn btn-sm">Update</button>
+                    <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Update</button>
                   </form>
                 </td>
                 <td className="p-2">
                   <form action={toggleFeaturedAction} className="flex items-center gap-2">
                     <input type="hidden" name="id" value={t.id} />
-                    <select name="featured" defaultValue={String(!!t.featured)} className="select select-sm">
+                    <select name="featured" defaultValue={String(!!t.featured)} className="px-2 py-1 border rounded bg-white text-black text-sm">
                       <option value="false">false</option>
                       <option value="true">true</option>
                     </select>
-                    <button type="submit" className="btn btn-sm">Save</button>
+                    <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Save</button>
                   </form>
                 </td>
                 <td className="p-2 space-y-2">
                   <form action={uploadBackgroundAction} className="flex items-center gap-2" encType="multipart/form-data">
                     <input type="hidden" name="id" value={t.id} />
-                    <input type="file" name="background" accept="image/*" className="input input-sm" />
-                    <button type="submit" className="btn btn-sm">Upload BG</button>
+                    <input type="file" name="background" accept="image/*" className="block text-sm" />
+                    <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG</button>
                   </form>
                   <form action={uploadPreviewAction} className="flex items-center gap-2" encType="multipart/form-data">
                     <input type="hidden" name="id" value={t.id} />
-                    <input type="file" name="preview" accept="image/*" className="input input-sm" />
-                    <button type="submit" className="btn btn-sm">Upload Preview</button>
+                    <input type="file" name="preview" accept="image/*" className="block text-sm" />
+                    <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Preview</button>
                   </form>
-                  <Link className="btn btn-sm" href={`/generate?templateId=${t.id}`}>Use</Link>
+                  <form action={uploadCompositeAction} className="flex items-center gap-2" encType="multipart/form-data">
+                    <input type="hidden" name="id" value={t.id} />
+                    <input type="file" name="composite" accept="image/*" className="block text-sm" />
+                    <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG+Product</button>
+                  </form>
+                  <Link className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700" href={`/generate?templateId=${t.id}`}>Use</Link>
                 </td>
               </tr>
             ))}
