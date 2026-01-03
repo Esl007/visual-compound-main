@@ -8,6 +8,7 @@ import { buildTemplateAssetPaths } from "@/lib/images/paths";
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import { redirect } from "next/navigation";
+import sharp from "sharp";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,22 +20,11 @@ async function publishAction(formData: FormData) {
   if (!id || !["draft", "published", "archived"].includes(status)) return;
   const supa = supabaseAdmin();
   if (status === "published") {
-    const { data: t } = await supa
-      .from("templates")
-      .select("id, background_image_path, preview_image_path, background_prompt, product_prompt, category_id, category")
-      .eq("id", id)
-      .single();
-    const hasCategory = !!(t?.category_id || t?.category);
-    const hasBG = !!t?.background_image_path;
-    const hasPreview = !!t?.preview_image_path;
-    const hasPrompts = !!(t?.background_prompt && t?.product_prompt);
-    if (!hasCategory || !hasBG || !hasPreview || !hasPrompts) return;
     const { error } = await supa
       .from("templates")
       .update({ status: "published", published_at: new Date().toISOString() as any, updated_at: new Date().toISOString() })
       .eq("id", id);
     if (error) {
-      // Fallback if published_at column is missing
       await supa.from("templates").update({ status: "published", updated_at: new Date().toISOString() }).eq("id", id);
     }
   } else {
@@ -115,19 +105,23 @@ async function createTemplateAction(formData: FormData) {
     featured,
   } as any);
   if (insertErr) {
-    await supa.from("templates").insert({
+    console.log("createTemplateAction insert error (full)", insertErr.message);
+    const { error: e2 } = await supa.from("templates").insert({
       id,
       title,
       category,
       background_prompt,
       product_prompt,
-      background_image_path: bgPath,
-      preview_image_path: previewPath,
-      thumbnail_400_path: t400,
-      thumbnail_600_path: t600,
       status: "draft",
       featured,
     } as any);
+    if (e2) {
+      console.log("createTemplateAction insert error (reduced)", e2.message);
+      const { error: e3 } = await supa.from("templates").insert({ id, title, category } as any);
+      if (e3) {
+        console.log("createTemplateAction insert error (minimal)", e3.message);
+      }
+    }
   }
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
@@ -154,22 +148,7 @@ async function uploadBackgroundAction(formData: FormData) {
   revalidatePath("/admin/templates1");
 }
 
-async function uploadPreviewAction(formData: FormData) {
-  "use server";
-  const id = String(formData.get("id") || "");
-  const file = formData.get("preview") as unknown as File | null;
-  if (!id || !file) return;
-  const bucket = process.env.S3_BUCKET as string;
-  if (!bucket) return;
-  const buf = Buffer.from(await (file as File).arrayBuffer());
-  const png = await reencodeToPng(buf);
-  const paths = buildTemplateAssetPaths(id);
-  await uploadImage({ bucket, key: paths.preview, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.preview) });
-  const supa = supabaseAdmin();
-  await supa.from("templates").update({ preview_image_path: paths.preview, updated_at: new Date().toISOString() }).eq("id", id);
-  revalidatePath("/admin/templates");
-  revalidatePath("/admin/templates1");
-}
+ 
 
 async function uploadCompositeAction(formData: FormData) {
   "use server";
@@ -179,13 +158,35 @@ async function uploadCompositeAction(formData: FormData) {
   const bucket = process.env.S3_BUCKET as string;
   if (!bucket) return;
   const buf = Buffer.from(await (file as File).arrayBuffer());
-  const png = await reencodeToPng(buf);
+  const productPng = await reencodeToPng(buf);
   const paths = buildTemplateAssetPaths(id);
-  await uploadImage({ bucket, key: paths.preview, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.preview) });
-  const thumbs = await generateAndUploadThumbnails({ input: png, bucket, outputBasePath: paths.base });
+  // Load background image for this template
+  const supa = supabaseAdmin();
+  const { data: tmpl } = await supa
+    .from("templates")
+    .select("background_image_path")
+    .eq("id", id)
+    .single();
+  const bgKey: string | null = tmpl?.background_image_path || null;
+  let composed: Buffer = productPng;
+  if (bgKey) {
+    const bgUrl = await getSignedUrl({ bucket, key: bgKey, expiresInSeconds: 120 });
+    if (bgUrl) {
+      const r = await fetch(bgUrl);
+      if (r.ok) {
+        const bgBuf = Buffer.from(await r.arrayBuffer());
+        try {
+          composed = await sharp(bgBuf).composite([{ input: productPng }]).png().toBuffer();
+        } catch (_) {
+          composed = productPng;
+        }
+      }
+    }
+  }
+  await uploadImage({ bucket, key: paths.preview, body: composed, contentType: "image/png", cacheControl: cacheControlForKey(paths.preview) });
+  const thumbs = await generateAndUploadThumbnails({ input: composed, bucket, outputBasePath: paths.base });
   const t400 = thumbs.find((t) => t.size === 400)?.path || null;
   const t600 = thumbs.find((t) => t.size === 600)?.path || null;
-  const supa = supabaseAdmin();
   await supa.from("templates").update({ preview_image_path: paths.preview, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() }).eq("id", id);
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
@@ -313,18 +314,13 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
             <h2 className="font-medium">Upload assets for new draft</h2>
             <Link href="/admin/templates1" className="text-sm underline">Close</Link>
           </div>
-          <div className="grid md:grid-cols-3 gap-3">
-            <form action={uploadBackgroundAction} encType="multipart/form-data" className="flex items-center gap-2">
+          <div className="grid md:grid-cols-2 gap-3">
+            <form action={uploadBackgroundAction} method="POST" encType="multipart/form-data" className="flex items-center gap-2">
               <input type="hidden" name="id" value={latestDraftId} />
               <input type="file" name="background" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
               <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG</button>
             </form>
-            <form action={uploadPreviewAction} encType="multipart/form-data" className="flex items-center gap-2">
-              <input type="hidden" name="id" value={latestDraftId} />
-              <input type="file" name="preview" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
-              <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Preview</button>
-            </form>
-            <form action={uploadCompositeAction} encType="multipart/form-data" className="flex items-center gap-2">
+            <form action={uploadCompositeAction} method="POST" encType="multipart/form-data" className="flex items-center gap-2">
               <input type="hidden" name="id" value={latestDraftId} />
               <input type="file" name="composite" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
               <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG+Product</button>
@@ -405,7 +401,7 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
                 </td>
                 <td className="p-2">{t.category_name || t.category || "-"}</td>
                 <td className="p-2">
-                  <form action={publishAction} className="flex items-center gap-2">
+                  <form action={publishAction} method="POST" className="flex items-center gap-2">
                     <input type="hidden" name="id" value={t.id} />
                     <select name="status" defaultValue={t.status} className="px-2 py-1 border rounded bg-white text-black text-sm">
                       <option value="draft">draft</option>
@@ -414,14 +410,14 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
                     </select>
                     <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Update</button>
                   </form>
-                  <form action={publishAction} className="mt-2">
+                  <form action={publishAction} method="POST" className="mt-2">
                     <input type="hidden" name="id" value={t.id} />
                     <input type="hidden" name="status" value="published" />
                     <button type="submit" className="px-3 py-1.5 rounded bg-green-600 text-white text-sm hover:bg-green-700">Publish</button>
                   </form>
                 </td>
                 <td className="p-2">
-                  <form action={toggleFeaturedAction} className="flex items-center gap-2">
+                  <form action={toggleFeaturedAction} method="POST" className="flex items-center gap-2">
                     <input type="hidden" name="id" value={t.id} />
                     <select name="featured" defaultValue={String(!!t.featured)} className="px-2 py-1 border rounded bg-white text-black text-sm">
                       <option value="false">false</option>
@@ -431,17 +427,12 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
                   </form>
                 </td>
                 <td className="p-2 space-y-2">
-                  <form action={uploadBackgroundAction} className="flex items-center gap-2" encType="multipart/form-data">
+                  <form action={uploadBackgroundAction} method="POST" className="flex items-center gap-2" encType="multipart/form-data">
                     <input type="hidden" name="id" value={t.id} />
                     <input type="file" name="background" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
                     <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG</button>
                   </form>
-                  <form action={uploadPreviewAction} className="flex items-center gap-2" encType="multipart/form-data">
-                    <input type="hidden" name="id" value={t.id} />
-                    <input type="file" name="preview" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
-                    <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Preview</button>
-                  </form>
-                  <form action={uploadCompositeAction} className="flex items-center gap-2" encType="multipart/form-data">
+                  <form action={uploadCompositeAction} method="POST" className="flex items-center gap-2" encType="multipart/form-data">
                     <input type="hidden" name="id" value={t.id} />
                     <input type="file" name="composite" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
                     <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG+Product</button>

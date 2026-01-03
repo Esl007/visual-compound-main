@@ -10,7 +10,17 @@ export async function GET() {
   // No auth required for GET per spec (public list), but we can safely read with admin since it is server-side
   const supa = supabaseAdmin();
   const { data, error } = await supa.from("template_categories").select("id,name").order("name", { ascending: true });
-  if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
+  if (error) {
+    const msg = String(error.message || "");
+    if (msg.includes("Could not find the table") || msg.includes("does not exist") || msg.includes("schema cache")) {
+      const { data: data2, error: err2 } = await supa.from("categories").select("id,name").order("name", { ascending: true });
+      if (!err2) {
+        return new Response(JSON.stringify({ items: data2 || [] }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ error: err2?.message || msg }), { status: 400 });
+    }
+    return new Response(JSON.stringify({ error: error.message }), { status: 400 });
+  }
   return new Response(JSON.stringify({ items: data || [] }), { status: 200, headers: { "content-type": "application/json" } });
 }
 
