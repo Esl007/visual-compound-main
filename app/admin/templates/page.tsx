@@ -222,18 +222,41 @@ export default async function Page() {
       "Minimal Product",
       "Outdoor",
     ];
-    const { data: existing } = await supa.from("template_categories").select("name");
-    const existingSet = new Set((existing || []).map((r: any) => String(r.name).trim().toLowerCase()));
-    const toInsert = defaults
-      .filter((n) => !existingSet.has(n.toLowerCase()))
-      .map((name) => ({ id: randomUUID(), name }));
-    if (toInsert.length) await supa.from("template_categories").insert(toInsert);
+    const { data: existing, error: exErr } = await supa.from("template_categories").select("name");
+    if (!exErr) {
+      const existingSet = new Set((existing || []).map((r: any) => String(r.name).trim().toLowerCase()));
+      const toInsert = defaults
+        .filter((n) => !existingSet.has(n.toLowerCase()))
+        .map((name) => ({ id: randomUUID(), name }));
+      if (toInsert.length) await supa.from("template_categories").insert(toInsert);
+    } else {
+      const { data: existing2 } = await supa.from("categories").select("name");
+      const existingSet2 = new Set((existing2 || []).map((r: any) => String(r.name).trim().toLowerCase()));
+      const toInsert2 = defaults
+        .filter((n) => !existingSet2.has(n.toLowerCase()))
+        .map((name) => ({ id: randomUUID(), name }));
+      if (toInsert2.length) await supa.from("categories").insert(toInsert2);
+    }
   } catch (_) {
   }
-  const { data: categories } = await supa
-    .from("template_categories")
-    .select("id,name")
-    .order("name", { ascending: true });
+  let categories: any[] | null = null;
+  let usingLegacyCategories = false;
+  {
+    const { data, error } = await supa
+      .from("template_categories")
+      .select("id,name")
+      .order("name", { ascending: true });
+    if (!error) {
+      categories = data || [];
+    } else {
+      usingLegacyCategories = true;
+      const { data: data2 } = await supa
+        .from("categories")
+        .select("id,name")
+        .order("name", { ascending: true });
+      categories = data2 || [];
+    }
+  }
   const categoryMap = new Map<string, string>((categories || []).map((c: any) => [c.id, c.name]));
   const { data } = await supa
     .from("templates")
@@ -258,10 +281,10 @@ export default async function Page() {
         <Link className="px-3 py-2 rounded border text-sm bg-white text-black hover:bg-gray-50" href="/templates">View Public Templates</Link>
       </div>
       <div className="rounded border p-4">
-        <form action={addCategoryAction} method="POST" className="flex items-center gap-2 mb-4">
+        <form action="/api/admin/categories?redirect=1" method="POST" className="flex items-center gap-2 mb-4">
           <label className="block text-sm">Add Category</label>
           <input name="name" placeholder="New category name" className="px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
-          <button type="submit" formAction="/api/admin/categories?redirect=1" className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Add</button>
+          <button type="submit" className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Add</button>
         </form>
         <form action="/api/admin/templates?redirect=1" method="POST" className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
           <div className="md:col-span-2">
@@ -271,10 +294,10 @@ export default async function Page() {
           <div>
             <label className="block text-sm mb-1">Category</label>
             {((categories || []).length > 0) ? (
-              <select name="category_id" className="w-full px-3 py-2 border rounded bg-white text-black">
+              <select name={usingLegacyCategories ? "category" : "category_id"} className="w-full px-3 py-2 border rounded bg-white text-black">
                 <option value="">Select a category</option>
                 {(categories || []).map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                  <option key={c.id} value={usingLegacyCategories ? c.name : c.id}>{c.name}</option>
                 ))}
               </select>
             ) : (

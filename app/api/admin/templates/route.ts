@@ -62,12 +62,22 @@ export async function POST(req: NextRequest) {
         status: "draft",
         featured,
       } as any);
-      if (e2) throw e2;
+      if (e2) {
+        // Final minimal fallback for very old schemas
+        const { error: e3 } = await supa.from("templates").insert({
+          id,
+          title,
+          category,
+        } as any);
+        if (e3) throw e3;
+      }
     }
 
     const accept = req.headers.get("accept") || "";
     if (accept.includes("text/html") || url.searchParams.get("redirect") === "1") {
-      return NextResponse.redirect(new URL("/admin/templates1", req.url), 303);
+      const u = new URL("/admin/templates1", req.url);
+      u.searchParams.set("created", id);
+      return NextResponse.redirect(u, 303);
     }
     return new Response(JSON.stringify({ id, status: "draft" }), { status: 200, headers: { "content-type": "application/json" } });
   } catch (e: any) {

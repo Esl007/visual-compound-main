@@ -39,9 +39,30 @@ export async function POST(req: NextRequest) {
     .insert({ id: randomUUID(), name })
     .select("id,name")
     .single();
-  if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
   const url = new URL(req.url);
   const accept = req.headers.get("accept") || "";
+  if (error) {
+    const msg = String(error.message || "");
+    if (msg.includes("Could not find the table") || msg.includes("does not exist") || msg.includes("schema cache")) {
+      // Fallback: try inserting into legacy 'categories' table
+      const { data: data2, error: err2 } = await supa
+        .from("categories")
+        .insert({ id: randomUUID(), name })
+        .select("id,name")
+        .single();
+      if (!err2) {
+        if (accept.includes("text/html") || url.searchParams.get("redirect") === "1") {
+          return NextResponse.redirect(new URL("/admin/templates1", req.url), 303);
+        }
+        return new Response(JSON.stringify(data2), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (accept.includes("text/html") || url.searchParams.get("redirect") === "1") {
+        return NextResponse.redirect(new URL("/admin/templates1", req.url), 303);
+      }
+      return new Response(JSON.stringify({ error: err2?.message || msg }), { status: 400 });
+    }
+    return new Response(JSON.stringify({ error: error.message }), { status: 400 });
+  }
   if (accept.includes("text/html") || url.searchParams.get("redirect") === "1") {
     return NextResponse.redirect(new URL("/admin/templates1", req.url), 303);
   }
