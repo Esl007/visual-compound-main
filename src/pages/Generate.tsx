@@ -298,6 +298,7 @@ export const Generate = () => {
         try {
           const j = await genRes.json();
           if (j && typeof j.error === "string" && j.error) msg = j.error;
+          if (j && typeof j.detail === "string" && j.detail) msg = `${msg}: ${j.detail}`;
         } catch {
           // ignore parse error; use generic message
         }
