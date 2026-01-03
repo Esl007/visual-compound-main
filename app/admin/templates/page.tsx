@@ -40,6 +40,7 @@ async function publishAction(formData: FormData) {
     await supa.from("templates").update({ status, updated_at: new Date().toISOString() }).eq("id", id);
   }
   revalidatePath("/admin/templates");
+  revalidatePath("/admin/templates1");
 }
 
 async function toggleFeaturedAction(formData: FormData) {
@@ -50,6 +51,7 @@ async function toggleFeaturedAction(formData: FormData) {
   const supa = supabaseAdmin();
   await supa.from("templates").update({ featured }).eq("id", id);
   revalidatePath("/admin/templates");
+  revalidatePath("/admin/templates1");
 }
 
 async function createTemplateAction(formData: FormData) {
@@ -127,6 +129,7 @@ async function createTemplateAction(formData: FormData) {
     } as any);
   }
   revalidatePath("/admin/templates");
+  revalidatePath("/admin/templates1");
 }
 
 async function uploadBackgroundAction(formData: FormData) {
@@ -146,6 +149,7 @@ async function uploadBackgroundAction(formData: FormData) {
   const supa = supabaseAdmin();
   await supa.from("templates").update({ background_image_path: paths.original, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() }).eq("id", id);
   revalidatePath("/admin/templates");
+  revalidatePath("/admin/templates1");
 }
 
 async function uploadPreviewAction(formData: FormData) {
@@ -162,6 +166,7 @@ async function uploadPreviewAction(formData: FormData) {
   const supa = supabaseAdmin();
   await supa.from("templates").update({ preview_image_path: paths.preview, updated_at: new Date().toISOString() }).eq("id", id);
   revalidatePath("/admin/templates");
+  revalidatePath("/admin/templates1");
 }
 
 async function uploadCompositeAction(formData: FormData) {
@@ -181,6 +186,7 @@ async function uploadCompositeAction(formData: FormData) {
   const supa = supabaseAdmin();
   await supa.from("templates").update({ preview_image_path: paths.preview, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() }).eq("id", id);
   revalidatePath("/admin/templates");
+  revalidatePath("/admin/templates1");
 }
 
 
@@ -193,6 +199,7 @@ async function addCategoryAction(formData: FormData) {
   const supa = supabaseAdmin();
   await supa.from("template_categories").insert({ id, name });
   revalidatePath("/admin/templates");
+  revalidatePath("/admin/templates1");
 }
 
 export default async function Page() {
