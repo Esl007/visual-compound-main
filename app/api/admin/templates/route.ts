@@ -10,6 +10,7 @@ export async function POST(req: NextRequest) {
     if (!adminToken) return new Response(JSON.stringify({ error: "Missing ADMIN_UPLOAD_TOKEN" }), { status: 500 });
     const headerToken = req.headers.get("x-admin-token");
     const cookieToken = req.cookies.get("admin-token")?.value;
+    console.log("/api/admin/templates POST", { hasHeader: !!headerToken, hasCookie: !!cookieToken });
     if (headerToken !== adminToken && cookieToken !== adminToken) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
 
     const supa = supabaseAdmin();
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
     const background_prompt: string | null = body?.background_prompt ?? null;
     const product_prompt: string | null = body?.product_prompt ?? null;
     const featured: boolean = typeof body?.featured === "string" ? (body.featured === "true") : Boolean(body?.featured);
+    console.log("/api/admin/templates body", { id, title, category, category_id, hasBG: !!background_prompt, hasPP: !!product_prompt, featured });
 
     let { error } = await supa.from("templates").insert({
       id,
@@ -52,6 +54,7 @@ export async function POST(req: NextRequest) {
       featured,
     } as any);
     if (error) {
+      console.log("templates insert error (with category_id)", error.message);
       // Fallback for environments without category_id column
       const { error: e2 } = await supa.from("templates").insert({
         id,
@@ -63,15 +66,20 @@ export async function POST(req: NextRequest) {
         featured,
       } as any);
       if (e2) {
+        console.log("templates insert error (without category_id)", e2.message);
         // Final minimal fallback for very old schemas
         const { error: e3 } = await supa.from("templates").insert({
           id,
           title,
           category,
         } as any);
-        if (e3) throw e3;
+        if (e3) {
+          console.log("templates insert error (minimal)", e3.message);
+          throw e3;
+        }
       }
     }
+    console.log("templates insert success", { id });
 
     const accept = req.headers.get("accept") || "";
     if (accept.includes("text/html") || url.searchParams.get("redirect") === "1") {

@@ -7,6 +7,7 @@ import { generateAndUploadThumbnails, reencodeToPng } from "@/lib/images/thumbs"
 import { buildTemplateAssetPaths } from "@/lib/images/paths";
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -130,6 +131,7 @@ async function createTemplateAction(formData: FormData) {
   }
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
+  redirect(`/admin/templates1?created=${id}`);
 }
 
 async function uploadBackgroundAction(formData: FormData) {
@@ -197,12 +199,16 @@ async function addCategoryAction(formData: FormData) {
   if (!name) return;
   const id = randomUUID();
   const supa = supabaseAdmin();
-  await supa.from("template_categories").insert({ id, name });
+  const { error } = await supa.from("template_categories").insert({ id, name });
+  if (error) {
+    await supa.from("categories").insert({ id, name });
+  }
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
+  redirect("/admin/templates1");
 }
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams?: { [key: string]: string | string[] | undefined } }) {
   const token = cookies().get("admin-token")?.value || "";
   const adminToken = process.env.ADMIN_UPLOAD_TOKEN || "";
   if (!adminToken || token !== adminToken) {
@@ -246,7 +252,7 @@ export default async function Page() {
       .from("template_categories")
       .select("id,name")
       .order("name", { ascending: true });
-    if (!error) {
+    if (!error && (data || []).length > 0) {
       categories = data || [];
     } else {
       usingLegacyCategories = true;
@@ -257,11 +263,30 @@ export default async function Page() {
       categories = data2 || [];
     }
   }
+  let data: any[] | null = null;
+  {
+    const q1 = await supa
+      .from("templates")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (!q1.error) {
+      data = q1.data || [];
+    } else {
+      const q2 = await supa.from("templates").select("*");
+      data = q2.data || [];
+    }
+  }
+  // If no categories were found in either table, derive from templates.category values
+  if (!categories || categories.length === 0) {
+    const set = new Set<string>();
+    (data || []).forEach((t: any) => {
+      if (t?.category) set.add(String(t.category));
+    });
+    categories = Array.from(set).map((name) => ({ id: name, name }));
+    usingLegacyCategories = true;
+  }
+  // Build mapping after final categories derivation
   const categoryMap = new Map<string, string>((categories || []).map((c: any) => [c.id, c.name]));
-  const { data } = await supa
-    .from("templates")
-    .select("id,title,category,category_id,status,featured,preview_image_path,thumbnail_400_path,thumbnail_600_path,created_at")
-    .order("created_at", { ascending: false });
 
   const bucket = process.env.S3_BUCKET as string;
   const rows = await Promise.all(
@@ -274,19 +299,46 @@ export default async function Page() {
     })
   );
 
+  const createdId = typeof searchParams?.["created"] === "string" ? String(searchParams?.["created"]) : Array.isArray(searchParams?.["created"]) ? String(searchParams?.["created"]?.[0] || "") : "";
+  const latestDraftId = createdId || (rows.find((t: any) => (t.status || "").toLowerCase() === "draft")?.id || "");
   return (
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Admin Templates</h1>
         <Link className="px-3 py-2 rounded border text-sm bg-white text-black hover:bg-gray-50" href="/templates">View Public Templates</Link>
       </div>
+      {latestDraftId ? (
+        <div className="rounded border p-4 bg-white">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-medium">Upload assets for new draft</h2>
+            <Link href="/admin/templates1" className="text-sm underline">Close</Link>
+          </div>
+          <div className="grid md:grid-cols-3 gap-3">
+            <form action={uploadBackgroundAction} encType="multipart/form-data" className="flex items-center gap-2">
+              <input type="hidden" name="id" value={latestDraftId} />
+              <input type="file" name="background" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
+              <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG</button>
+            </form>
+            <form action={uploadPreviewAction} encType="multipart/form-data" className="flex items-center gap-2">
+              <input type="hidden" name="id" value={latestDraftId} />
+              <input type="file" name="preview" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
+              <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Preview</button>
+            </form>
+            <form action={uploadCompositeAction} encType="multipart/form-data" className="flex items-center gap-2">
+              <input type="hidden" name="id" value={latestDraftId} />
+              <input type="file" name="composite" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
+              <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG+Product</button>
+            </form>
+          </div>
+        </div>
+      ) : null}
       <div className="rounded border p-4">
-        <form action="/api/admin/categories?redirect=1" method="POST" className="flex items-center gap-2 mb-4">
+        <form action={addCategoryAction} method="POST" className="flex items-center gap-2 mb-4">
           <label className="block text-sm">Add Category</label>
           <input name="name" placeholder="New category name" className="px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
           <button type="submit" className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Add</button>
         </form>
-        <form action="/api/admin/templates?redirect=1" method="POST" className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+        <form action={createTemplateAction} method="POST" className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
           <div className="md:col-span-2">
             <label className="block text-sm mb-1">Title</label>
             <input name="title" placeholder="Title" className="w-full px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
