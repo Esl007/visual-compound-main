@@ -79,6 +79,34 @@ export const Generate = () => {
     }
   }, [searchParams]);
 
+  // If a template is selected, prefill the UI: switch to Product tab, load its preview/background as inline image, and seed prompt
+  useEffect(() => {
+    let aborted = false;
+    (async () => {
+      if (!templateId) return;
+      try {
+        const res = await fetch(`/api/templates?id=${encodeURIComponent(templateId)}`);
+        if (!res.ok) return;
+        const j = await res.json();
+        const item = Array.isArray(j?.items) && j.items.length > 0 ? j.items[0] : null;
+        if (!item) return;
+        if (aborted) return;
+        // Prefer thumb/preview; API already falls back to background when preview missing
+        const url: string | null = item.thumb_600_url || item.thumb_400_url || item.preview_url || null;
+        if (url) setUploadedImageUrl(url);
+        // Pre-seed scene description with template's product prompt
+        if (typeof item.product_prompt === "string" && item.product_prompt.trim()) {
+          setSceneDescription(item.product_prompt);
+        }
+        setKeepBackground(true);
+        setActiveTab("product");
+      } catch {}
+    })();
+    return () => {
+      aborted = true;
+    };
+  }, [templateId]);
+
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
     const params = new URLSearchParams(searchParams?.toString() || "");

@@ -16,16 +16,21 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") || 50)));
     const from = Math.max(0, Number(searchParams.get("from") || 0));
+    const byId = String(searchParams.get("id") || "").trim() || null;
 
     async function loadTemplates() {
       try {
-        const q = (supa as any)
+        let q = (supa as any)
           .from("templates")
-          .select("id,title,category,preview_image_path,thumbnail_400_path,thumbnail_600_path,featured,created_at")
+          .select("id,title,category,product_prompt,preview_image_path,background_image_path,thumbnail_400_path,thumbnail_600_path,featured,created_at")
           .eq("status", "published")
           .order("featured", { ascending: false })
-          .order("created_at", { ascending: false })
-          .range(from, from + limit - 1);
+          .order("created_at", { ascending: false });
+        if (byId) {
+          q = q.eq("id", byId).range(0, 0);
+        } else {
+          q = q.range(from, from + limit - 1);
+        }
         const { data, error } = await q;
         if (error) throw error;
         return data || [];
@@ -33,13 +38,18 @@ export async function GET(req: NextRequest) {
         const msg = String(err?.message || err || "");
         if (/unauthor/i.test(msg) || /invalid api key/i.test(msg) || /Missing NEXT_PUBLIC_SUPABASE_URL/i.test(msg)) {
           const supa2 = supabaseAdmin();
-          const { data: data2, error: err2 } = await (supa2 as any)
+          let q2 = (supa2 as any)
             .from("templates")
-            .select("id,title,category,preview_image_path,thumbnail_400_path,thumbnail_600_path,featured,created_at")
+            .select("id,title,category,product_prompt,preview_image_path,background_image_path,thumbnail_400_path,thumbnail_600_path,featured,created_at")
             .eq("status", "published")
             .order("featured", { ascending: false })
-            .order("created_at", { ascending: false })
-            .range(from, from + limit - 1);
+            .order("created_at", { ascending: false });
+          if (byId) {
+            q2 = q2.eq("id", byId).range(0, 0);
+          } else {
+            q2 = q2.range(from, from + limit - 1);
+          }
+          const { data: data2, error: err2 } = await q2;
           if (err2) throw err2;
           return data2 || [];
         }
@@ -61,11 +71,15 @@ export async function GET(req: NextRequest) {
           id: row.id,
           title: row.title,
           category: row.category,
+          product_prompt: row.product_prompt,
           featured: row.featured,
           created_at: row.created_at,
         };
         if (row.preview_image_path) {
           out.preview_url = await getSignedUrl({ bucket, key: row.preview_image_path, expiresInSeconds: 300 });
+        } else if (row.background_image_path) {
+          // Fallback to background image for preview when a composed preview is not available yet
+          out.preview_url = await getSignedUrl({ bucket, key: row.background_image_path, expiresInSeconds: 300 });
         }
         if (row.thumbnail_400_path) {
           out.thumb_400_url = await getSignedUrl({ bucket, key: row.thumbnail_400_path, expiresInSeconds: 300 });

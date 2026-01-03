@@ -143,7 +143,16 @@ async function uploadBackgroundAction(formData: FormData) {
   const t400 = thumbs.find((t) => t.size === 400)?.path || null;
   const t600 = thumbs.find((t) => t.size === 600)?.path || null;
   const supa = supabaseAdmin();
-  await supa.from("templates").update({ background_image_path: paths.original, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() }).eq("id", id);
+  const { error } = await supa
+    .from("templates")
+    .update({ background_image_path: paths.original, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) {
+    await supa
+      .from("templates")
+      .update({ background_image_path: paths.original, updated_at: new Date().toISOString() })
+      .eq("id", id);
+  }
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
 }
@@ -153,7 +162,7 @@ async function uploadBackgroundAction(formData: FormData) {
 async function uploadCompositeAction(formData: FormData) {
   "use server";
   const id = String(formData.get("id") || "");
-  const file = formData.get("composite") as unknown as File | null;
+  const file = (formData.get("product") as unknown as File | null) || (formData.get("composite") as unknown as File | null);
   if (!id || !file) return;
   const bucket = process.env.S3_BUCKET as string;
   if (!bucket) return;
@@ -187,7 +196,16 @@ async function uploadCompositeAction(formData: FormData) {
   const thumbs = await generateAndUploadThumbnails({ input: composed, bucket, outputBasePath: paths.base });
   const t400 = thumbs.find((t) => t.size === 400)?.path || null;
   const t600 = thumbs.find((t) => t.size === 600)?.path || null;
-  await supa.from("templates").update({ preview_image_path: paths.preview, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() }).eq("id", id);
+  const { error: upErr } = await supa
+    .from("templates")
+    .update({ preview_image_path: paths.preview, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (upErr) {
+    await supa
+      .from("templates")
+      .update({ preview_image_path: paths.preview, updated_at: new Date().toISOString() })
+      .eq("id", id);
+  }
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
 }
@@ -322,8 +340,8 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
             </form>
             <form action={uploadCompositeAction} method="POST" encType="multipart/form-data" className="flex items-center gap-2">
               <input type="hidden" name="id" value={latestDraftId} />
-              <input type="file" name="composite" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
-              <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG+Product</button>
+              <input type="file" name="product" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
+              <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Product</button>
             </form>
           </div>
         </div>
@@ -434,8 +452,8 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
                   </form>
                   <form action={uploadCompositeAction} method="POST" className="flex items-center gap-2" encType="multipart/form-data">
                     <input type="hidden" name="id" value={t.id} />
-                    <input type="file" name="composite" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
-                    <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG+Product</button>
+                    <input type="file" name="product" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
+                    <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Product</button>
                   </form>
                   <Link className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700" href={`/generate?templateId=${t.id}`}>Use</Link>
                 </td>
