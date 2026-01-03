@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 async function publishAction(formData: FormData) {
   "use server";
