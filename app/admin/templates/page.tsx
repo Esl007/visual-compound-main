@@ -305,7 +305,7 @@ export default async function Page() {
             </select>
           </div>
           <div>
-            <button type="submit" className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Create Draft</button>
+            <button type="submit" formAction="/api/admin/templates?redirect=1" className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Create Draft</button>
           </div>
         </form>
       </div>
