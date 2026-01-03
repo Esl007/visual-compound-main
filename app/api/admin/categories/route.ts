@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { randomUUID } from "crypto";
 
@@ -40,5 +40,10 @@ export async function POST(req: NextRequest) {
     .select("id,name")
     .single();
   if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
+  const url = new URL(req.url);
+  const accept = req.headers.get("accept") || "";
+  if (accept.includes("text/html") || url.searchParams.get("redirect") === "1") {
+    return NextResponse.redirect(new URL("/admin/templates1", req.url), 303);
+  }
   return new Response(JSON.stringify(data), { status: 200, headers: { "content-type": "application/json" } });
 }

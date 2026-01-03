@@ -258,12 +258,12 @@ export default async function Page() {
         <Link className="px-3 py-2 rounded border text-sm bg-white text-black hover:bg-gray-50" href="/templates">View Public Templates</Link>
       </div>
       <div className="rounded border p-4">
-        <form action={addCategoryAction} className="flex items-center gap-2 mb-4">
+        <form action={addCategoryAction} method="POST" className="flex items-center gap-2 mb-4">
           <label className="block text-sm">Add Category</label>
           <input name="name" placeholder="New category name" className="px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
-          <button type="submit" className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Add</button>
+          <button type="submit" formAction="/api/admin/categories?redirect=1" className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Add</button>
         </form>
-        <form action={createTemplateAction} encType="multipart/form-data" className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+        <form action="/api/admin/templates?redirect=1" method="POST" className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
           <div className="md:col-span-2">
             <label className="block text-sm mb-1">Title</label>
             <input name="title" placeholder="Title" className="w-full px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
@@ -281,21 +281,13 @@ export default async function Page() {
               <input name="category" placeholder="Category" className="w-full px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
             )}
           </div>
-          <div className="md:col-span-2">
+          <div className="md:col-span-3">
             <label className="block text-sm mb-1">Background Prompt</label>
-            <input name="background_prompt" placeholder="Background prompt" className="w-full px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
+            <textarea name="background_prompt" placeholder="Background prompt" rows={3} className="w-full px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500"></textarea>
           </div>
-          <div>
+          <div className="md:col-span-3">
             <label className="block text-sm mb-1">Product Prompt</label>
-            <input name="product_prompt" placeholder="Product prompt" className="w-full px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm mb-1">Background Image</label>
-            <input type="file" name="background" accept="image/*" className="w-full border rounded px-2 py-1 text-sm bg-white text-black" />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm mb-1">BG+Product Image (Composite)</label>
-            <input type="file" name="composite" accept="image/*" className="w-full border rounded px-2 py-1 text-sm bg-white text-black" />
+            <textarea name="product_prompt" placeholder="Product prompt" rows={3} className="w-full px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500"></textarea>
           </div>
           <div className="flex items-center gap-2">
             <label className="text-sm">Featured</label>
@@ -305,7 +297,7 @@ export default async function Page() {
             </select>
           </div>
           <div>
-            <button type="submit" formAction="/api/admin/templates?redirect=1" className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Create Draft</button>
+            <button type="submit" className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Create Draft</button>
           </div>
         </form>
       </div>

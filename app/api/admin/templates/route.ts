@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     const category_id: string | null = body?.category_id ?? null;
     const background_prompt: string | null = body?.background_prompt ?? null;
     const product_prompt: string | null = body?.product_prompt ?? null;
-    const featured: boolean = Boolean(body?.featured);
+    const featured: boolean = typeof body?.featured === "string" ? (body.featured === "true") : Boolean(body?.featured);
 
     let { error } = await supa.from("templates").insert({
       id,
