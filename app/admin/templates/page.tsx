@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import { redirect } from "next/navigation";
 import sharp from "sharp";
+import { PendingButton } from "./PendingButton";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -220,7 +221,16 @@ async function addCategoryAction(formData: FormData) {
   const supa = supabaseAdmin();
   const { error } = await supa.from("template_categories").insert({ id, name });
   if (error) {
-    await supa.from("categories").insert({ id, name });
+    const msg = String(error.message || "");
+    // If table missing, fall back to legacy table
+    if (/Could not find the table|does not exist|schema cache/i.test(msg)) {
+      await supa.from("categories").insert({ id, name });
+    } else if (/duplicate key value|already exists|duplicate entry/i.test(msg)) {
+      // Ignore duplicates to behave like idempotent add
+    } else {
+      // Last resort: try legacy table as well
+      try { await supa.from("categories").insert({ id, name }); } catch {}
+    }
   }
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
@@ -310,7 +320,11 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
   const bucket = process.env.S3_BUCKET as string;
   const rows = await Promise.all(
     (data || []).map(async (t: any) => {
-      const preview_url = t.preview_image_path ? await getSignedUrl({ bucket, key: t.preview_image_path, expiresInSeconds: 300 }) : null;
+      const preview_url = t.preview_image_path
+        ? await getSignedUrl({ bucket, key: t.preview_image_path, expiresInSeconds: 300 })
+        : (t.background_image_path
+          ? await getSignedUrl({ bucket, key: t.background_image_path, expiresInSeconds: 300 })
+          : null);
       const thumb_400_url = t.thumbnail_400_path ? await getSignedUrl({ bucket, key: t.thumbnail_400_path, expiresInSeconds: 300 }) : null;
       const thumb_600_url = t.thumbnail_600_path ? await getSignedUrl({ bucket, key: t.thumbnail_600_path, expiresInSeconds: 300 }) : null;
       const category_name = t.category_id ? (categoryMap.get(t.category_id) || null) : (t.category || null);
@@ -335,13 +349,13 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
           <div className="grid md:grid-cols-2 gap-3">
             <form action={uploadBackgroundAction} method="POST" encType="multipart/form-data" className="flex items-center gap-2">
               <input type="hidden" name="id" value={latestDraftId} />
-              <input type="file" name="background" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
-              <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG</button>
+              <input required type="file" name="background" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
+              <PendingButton pendingText="Uploading..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG</PendingButton>
             </form>
             <form action={uploadCompositeAction} method="POST" encType="multipart/form-data" className="flex items-center gap-2">
               <input type="hidden" name="id" value={latestDraftId} />
-              <input type="file" name="product" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
-              <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Product</button>
+              <input required type="file" name="product" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
+              <PendingButton pendingText="Uploading..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Product</PendingButton>
             </form>
           </div>
         </div>
@@ -350,7 +364,7 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
         <form action={addCategoryAction} method="POST" className="flex items-center gap-2 mb-4">
           <label className="block text-sm">Add Category</label>
           <input name="name" placeholder="New category name" className="px-3 py-2 border rounded bg-white text-black placeholder:text-gray-500" />
-          <button type="submit" className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Add</button>
+          <PendingButton pendingText="Adding..." className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Add</PendingButton>
         </form>
         <form action={createTemplateAction} method="POST" className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
           <div className="md:col-span-2">
@@ -386,7 +400,7 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
             </select>
           </div>
           <div>
-            <button type="submit" className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Create Draft</button>
+            <PendingButton pendingText="Creating..." className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Create Draft</PendingButton>
           </div>
         </form>
       </div>
@@ -426,12 +440,12 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
                       <option value="published">published</option>
                       <option value="archived">archived</option>
                     </select>
-                    <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Update</button>
+                    <PendingButton pendingText="Updating..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Update</PendingButton>
                   </form>
                   <form action={publishAction} method="POST" className="mt-2">
                     <input type="hidden" name="id" value={t.id} />
                     <input type="hidden" name="status" value="published" />
-                    <button type="submit" className="px-3 py-1.5 rounded bg-green-600 text-white text-sm hover:bg-green-700">Publish</button>
+                    <PendingButton pendingText="Publishing..." className="px-3 py-1.5 rounded bg-green-600 text-white text-sm hover:bg-green-700">Publish</PendingButton>
                   </form>
                 </td>
                 <td className="p-2">
@@ -441,19 +455,19 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
                       <option value="false">false</option>
                       <option value="true">true</option>
                     </select>
-                    <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Save</button>
+                    <PendingButton pendingText="Saving..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Save</PendingButton>
                   </form>
                 </td>
                 <td className="p-2 space-y-2">
                   <form action={uploadBackgroundAction} method="POST" className="flex items-center gap-2" encType="multipart/form-data">
                     <input type="hidden" name="id" value={t.id} />
-                    <input type="file" name="background" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
-                    <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG</button>
+                    <input required type="file" name="background" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
+                    <PendingButton pendingText="Uploading..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG</PendingButton>
                   </form>
                   <form action={uploadCompositeAction} method="POST" className="flex items-center gap-2" encType="multipart/form-data">
                     <input type="hidden" name="id" value={t.id} />
-                    <input type="file" name="product" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
-                    <button type="submit" className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Product</button>
+                    <input required type="file" name="product" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
+                    <PendingButton pendingText="Uploading..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Product</PendingButton>
                   </form>
                   <Link className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700" href={`/generate?templateId=${t.id}`}>Use</Link>
                 </td>
