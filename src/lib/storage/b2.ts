@@ -38,7 +38,14 @@ export async function uploadImage(params: {
     ContentType: params.contentType,
     CacheControl: params.cacheControl,
   });
-  await client.send(cmd);
+  try {
+    await client.send(cmd);
+  } catch (e: any) {
+    const name = e?.name || e?.code || "UploadError";
+    const msg = e?.message || String(e);
+    const extra = e?.$metadata ? ` status=${e.$metadata.httpStatusCode}` : "";
+    throw new Error(`PutObject failed bucket=${params.bucket} key=${params.key} ${name}${extra}: ${msg}`);
+  }
 }
 
 export async function deleteImage(params: { bucket: string; key: string }) {
@@ -59,4 +66,44 @@ export function cacheControlForKey(key: string) {
   // Long-lived CDN caching for user images. Objects are immutable by id, so safe to cache long on CDN.
   if (key.startsWith("users/")) return "public, max-age=31536000, immutable";
   return undefined;
+}
+
+// Lightweight existence probe using a presigned GET URL and a HEAD request
+export async function headObjectUrlIfExists(bucket: string, key: string, timeoutMs: number = 2500): Promise<string | null> {
+  try {
+    const url = await getSignedUrl({ bucket, key, expiresInSeconds: 180 });
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), timeoutMs);
+    try {
+      const r = await fetch(url, { method: "HEAD", signal: ac.signal } as any);
+      if (r.ok) return url;
+    } finally {
+      clearTimeout(t);
+    }
+  } catch {}
+  return null;
+}
+
+export async function uploadImageWithVerify(
+  params: {
+    bucket: string;
+    key: string;
+    body: Buffer;
+    contentType: string;
+    cacheControl?: string;
+  },
+  opts?: { verify?: boolean; maxVerifyMs?: number }
+) {
+  await uploadImage(params);
+  if (opts?.verify === false) return;
+  const deadline = Date.now() + (opts?.maxVerifyMs ?? 4000);
+  // 2 quick probes with short waits, then give up (still succeed, but caller may choose to warn)
+  let lastUrl: string | null = null;
+  while (Date.now() < deadline) {
+    lastUrl = await headObjectUrlIfExists(params.bucket, params.key, 1500);
+    if (lastUrl) return;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  // If we get here, upload succeeded but object not yet retrievable
+  throw new Error(`Uploaded but not yet retrievable bucket=${params.bucket} key=${params.key}`);
 }

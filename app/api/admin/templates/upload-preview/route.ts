@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { uploadImage, cacheControlForKey } from "@/lib/storage/b2";
+import { uploadImageWithVerify, cacheControlForKey } from "@/lib/storage/b2";
 import { buildTemplateAssetPaths } from "@/lib/images/paths";
 import { reencodeToPng } from "@/lib/images/thumbs";
 
@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
     const adminToken = process.env.ADMIN_UPLOAD_TOKEN;
     if (!adminToken) return new Response(JSON.stringify({ error: "Missing ADMIN_UPLOAD_TOKEN" }), { status: 500 });
     const headerToken = req.headers.get("x-admin-token");
-    if (headerToken !== adminToken) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+    const cookieToken = req.cookies.get("admin-token")?.value;
+    if (headerToken !== adminToken && cookieToken !== adminToken) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
 
     const supa = supabaseAdmin();
     const body = await req.json();
@@ -41,16 +42,26 @@ export async function POST(req: NextRequest) {
 
     const paths = buildTemplateAssetPaths(templateId);
 
-    await uploadImage({ bucket, key: paths.preview, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.preview) });
+    await uploadImageWithVerify({ bucket, key: paths.preview, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.preview) });
+
+    // Generate thumbnails from the preview as well to ensure the grid has assets
+    let t400: string | null = null;
+    let t600: string | null = null;
+    try {
+      const { generateAndUploadThumbnails } = await import("@/lib/images/thumbs");
+      const thumbs = await generateAndUploadThumbnails({ input: png, bucket, outputBasePath: paths.base });
+      t400 = thumbs.find((t) => t.size === 400)?.path || null;
+      t600 = thumbs.find((t) => t.size === 600)?.path || null;
+    } catch {}
 
     const { error } = await supa
       .from("templates")
-      .update({ preview_image_path: paths.preview, updated_at: new Date().toISOString() })
+      .update({ preview_image_path: paths.preview, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() })
       .eq("id", templateId);
     if (error) throw error;
 
     return new Response(
-      JSON.stringify({ templateId, preview_image_path: paths.preview }),
+      JSON.stringify({ templateId, preview_image_path: paths.preview, thumbnail_400_path: t400, thumbnail_600_path: t600 }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
   } catch (e: any) {

@@ -2,7 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getSignedUrl } from "@/lib/storage/b2";
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { uploadImage, cacheControlForKey } from "@/lib/storage/b2";
+import { uploadImageWithVerify, cacheControlForKey } from "@/lib/storage/b2";
 import { generateAndUploadThumbnails, reencodeToPng } from "@/lib/images/thumbs";
 import { buildTemplateAssetPaths } from "@/lib/images/paths";
 import { revalidatePath } from "next/cache";
@@ -19,17 +19,23 @@ async function publishAction(formData: FormData) {
   const id = String(formData.get("id") || "");
   const status = String(formData.get("status") || "");
   if (!id || !["draft", "published", "archived"].includes(status)) return;
-  const supa = supabaseAdmin();
-  if (status === "published") {
-    const { error } = await supa
-      .from("templates")
-      .update({ status: "published", published_at: new Date().toISOString() as any, updated_at: new Date().toISOString() })
-      .eq("id", id);
-    if (error) {
-      await supa.from("templates").update({ status: "published", updated_at: new Date().toISOString() }).eq("id", id);
+  try {
+    const supa = supabaseAdmin();
+    if (status === "published") {
+      const { error } = await supa
+        .from("templates")
+        .update({ status: "published", published_at: new Date().toISOString() as any, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) {
+        await supa.from("templates").update({ status: "published", updated_at: new Date().toISOString() }).eq("id", id);
+      }
+    } else {
+      await supa.from("templates").update({ status, updated_at: new Date().toISOString() }).eq("id", id);
     }
-  } else {
-    await supa.from("templates").update({ status, updated_at: new Date().toISOString() }).eq("id", id);
+  } catch (e: any) {
+    revalidatePath("/admin/templates");
+    revalidatePath("/admin/templates1");
+    redirect(`/admin/templates1?err=${encodeURIComponent(e?.message || "Publish failed")}`);
   }
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
@@ -40,8 +46,14 @@ async function toggleFeaturedAction(formData: FormData) {
   const id = String(formData.get("id") || "");
   const featured = String(formData.get("featured") || "false") === "true";
   if (!id) return;
-  const supa = supabaseAdmin();
-  await supa.from("templates").update({ featured }).eq("id", id);
+  try {
+    const supa = supabaseAdmin();
+    await supa.from("templates").update({ featured }).eq("id", id);
+  } catch (e: any) {
+    revalidatePath("/admin/templates");
+    revalidatePath("/admin/templates1");
+    redirect(`/admin/templates1?err=${encodeURIComponent(e?.message || "Save failed")}`);
+  }
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
 }
@@ -55,74 +67,78 @@ async function createTemplateAction(formData: FormData) {
   const background_prompt = formData.get("background_prompt") ? String(formData.get("background_prompt")) : null;
   const product_prompt = formData.get("product_prompt") ? String(formData.get("product_prompt")) : null;
   const featured = String(formData.get("featured") || "false") === "true";
-  const supa = supabaseAdmin();
-  const bucket = process.env.S3_BUCKET as string;
-  const paths = buildTemplateAssetPaths(id);
-  let bgPath: string | null = null;
-  let previewPath: string | null = null;
-  let t400: string | null = null;
-  let t600: string | null = null;
-  // If a category_id is provided, resolve its name and mirror it to the legacy 'category' column
-  if (category_id) {
-    const { data: cat } = await supa.from("template_categories").select("name").eq("id", category_id).single();
-    if (cat?.name) category = cat.name;
-  }
+  try {
+    const supa = supabaseAdmin();
+    const bucket = process.env.S3_BUCKET as string;
+    const paths = buildTemplateAssetPaths(id);
+    let bgPath: string | null = null;
+    let previewPath: string | null = null;
+    let t400: string | null = null;
+    let t600: string | null = null;
+    // If a category_id is provided, resolve its name and mirror it to the legacy 'category' column
+    if (category_id) {
+      const { data: cat } = await supa.from("template_categories").select("name").eq("id", category_id).single();
+      if (cat?.name) category = cat.name;
+    }
 
-  if (bucket) {
-    const bg = formData.get("background") as unknown as File | null;
-    if (bg) {
-      const buf = Buffer.from(await (bg as File).arrayBuffer());
-      const png = await reencodeToPng(buf);
-      await uploadImage({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
-      const thumbs = await generateAndUploadThumbnails({ input: png, bucket, outputBasePath: paths.base });
-      t400 = thumbs.find((t) => t.size === 400)?.path || null;
-      t600 = thumbs.find((t) => t.size === 600)?.path || null;
-      bgPath = paths.original;
+    if (bucket) {
+      const bg = formData.get("background") as unknown as File | null;
+      if (bg) {
+        const buf = Buffer.from(await (bg as File).arrayBuffer());
+        const png = await reencodeToPng(buf);
+        await uploadImageWithVerify({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
+        const thumbs = await generateAndUploadThumbnails({ input: png, bucket, outputBasePath: paths.base });
+        t400 = thumbs.find((t) => t.size === 400)?.path || null;
+        t600 = thumbs.find((t) => t.size === 600)?.path || null;
+        bgPath = paths.original;
+      }
+      const comp = formData.get("composite") as unknown as File | null;
+      if (comp) {
+        const buf2 = Buffer.from(await (comp as File).arrayBuffer());
+        const png2 = await reencodeToPng(buf2);
+        await uploadImageWithVerify({ bucket, key: paths.preview, body: png2, contentType: "image/png", cacheControl: cacheControlForKey(paths.preview) });
+        const thumbs2 = await generateAndUploadThumbnails({ input: png2, bucket, outputBasePath: paths.base });
+        t400 = thumbs2.find((t) => t.size === 400)?.path || t400;
+        t600 = thumbs2.find((t) => t.size === 600)?.path || t600;
+        previewPath = paths.preview;
+      }
     }
-    const comp = formData.get("composite") as unknown as File | null;
-    if (comp) {
-      const buf2 = Buffer.from(await (comp as File).arrayBuffer());
-      const png2 = await reencodeToPng(buf2);
-      await uploadImage({ bucket, key: paths.preview, body: png2, contentType: "image/png", cacheControl: cacheControlForKey(paths.preview) });
-      const thumbs2 = await generateAndUploadThumbnails({ input: png2, bucket, outputBasePath: paths.base });
-      t400 = thumbs2.find((t) => t.size === 400)?.path || t400;
-      t600 = thumbs2.find((t) => t.size === 600)?.path || t600;
-      previewPath = paths.preview;
-    }
-  }
-  // Try insert with category_id, and fall back if column doesn't exist
-  let { error: insertErr } = await supa.from("templates").insert({
-    id,
-    title,
-    category_id,
-    category,
-    background_prompt,
-    product_prompt,
-    background_image_path: bgPath,
-    preview_image_path: previewPath,
-    thumbnail_400_path: t400,
-    thumbnail_600_path: t600,
-    status: "draft",
-    featured,
-  } as any);
-  if (insertErr) {
-    console.log("createTemplateAction insert error (full)", insertErr.message);
-    const { error: e2 } = await supa.from("templates").insert({
+    // Try insert with category_id, and fall back if column doesn't exist
+    let { error: insertErr } = await supa.from("templates").insert({
       id,
       title,
+      category_id,
       category,
       background_prompt,
       product_prompt,
+      background_image_path: bgPath,
+      preview_image_path: previewPath,
+      thumbnail_400_path: t400,
+      thumbnail_600_path: t600,
       status: "draft",
       featured,
     } as any);
-    if (e2) {
-      console.log("createTemplateAction insert error (reduced)", e2.message);
-      const { error: e3 } = await supa.from("templates").insert({ id, title, category } as any);
-      if (e3) {
-        console.log("createTemplateAction insert error (minimal)", e3.message);
+    if (insertErr) {
+      const { error: e2 } = await supa.from("templates").insert({
+        id,
+        title,
+        category,
+        background_prompt,
+        product_prompt,
+        status: "draft",
+        featured,
+      } as any);
+      if (e2) {
+        const { error: e3 } = await supa.from("templates").insert({ id, title, category } as any);
+        if (e3) {
+          throw new Error(e3.message || "Create draft failed");
+        }
       }
     }
+  } catch (e: any) {
+    revalidatePath("/admin/templates");
+    revalidatePath("/admin/templates1");
+    redirect(`/admin/templates1?err=${encodeURIComponent(e?.message || "Create failed")}`);
   }
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
@@ -134,25 +150,31 @@ async function uploadBackgroundAction(formData: FormData) {
   const id = String(formData.get("id") || "");
   const file = formData.get("background") as unknown as File | null;
   if (!id || !file) return;
-  const bucket = process.env.S3_BUCKET as string;
-  if (!bucket) return;
-  const buf = Buffer.from(await (file as File).arrayBuffer());
-  const png = await reencodeToPng(buf);
-  const paths = buildTemplateAssetPaths(id);
-  await uploadImage({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
-  const thumbs = await generateAndUploadThumbnails({ input: png, bucket, outputBasePath: paths.base });
-  const t400 = thumbs.find((t) => t.size === 400)?.path || null;
-  const t600 = thumbs.find((t) => t.size === 600)?.path || null;
-  const supa = supabaseAdmin();
-  const { error } = await supa
-    .from("templates")
-    .update({ background_image_path: paths.original, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() })
-    .eq("id", id);
-  if (error) {
-    await supa
+  try {
+    const bucket = process.env.S3_BUCKET as string;
+    if (!bucket) throw new Error("Missing S3_BUCKET");
+    const buf = Buffer.from(await (file as File).arrayBuffer());
+    const png = await reencodeToPng(buf);
+    const paths = buildTemplateAssetPaths(id);
+    await uploadImageWithVerify({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
+    const thumbs = await generateAndUploadThumbnails({ input: png, bucket, outputBasePath: paths.base });
+    const t400 = thumbs.find((t) => t.size === 400)?.path || null;
+    const t600 = thumbs.find((t) => t.size === 600)?.path || null;
+    const supa = supabaseAdmin();
+    const { error } = await supa
       .from("templates")
-      .update({ background_image_path: paths.original, updated_at: new Date().toISOString() })
+      .update({ background_image_path: paths.original, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() })
       .eq("id", id);
+    if (error) {
+      await supa
+        .from("templates")
+        .update({ background_image_path: paths.original, updated_at: new Date().toISOString() })
+        .eq("id", id);
+    }
+  } catch (e: any) {
+    revalidatePath("/admin/templates");
+    revalidatePath("/admin/templates1");
+    redirect(`/admin/templates1?err=${encodeURIComponent(e?.message || "Upload background failed")}`);
   }
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
@@ -165,47 +187,53 @@ async function uploadCompositeAction(formData: FormData) {
   const id = String(formData.get("id") || "");
   const file = (formData.get("product") as unknown as File | null) || (formData.get("composite") as unknown as File | null);
   if (!id || !file) return;
-  const bucket = process.env.S3_BUCKET as string;
-  if (!bucket) return;
-  const buf = Buffer.from(await (file as File).arrayBuffer());
-  const productPng = await reencodeToPng(buf);
-  const paths = buildTemplateAssetPaths(id);
-  // Load background image for this template
-  const supa = supabaseAdmin();
-  const { data: tmpl } = await supa
-    .from("templates")
-    .select("background_image_path")
-    .eq("id", id)
-    .single();
-  const bgKey: string | null = tmpl?.background_image_path || null;
-  let composed: Buffer = productPng;
-  if (bgKey) {
-    const bgUrl = await getSignedUrl({ bucket, key: bgKey, expiresInSeconds: 120 });
-    if (bgUrl) {
-      const r = await fetch(bgUrl);
-      if (r.ok) {
-        const bgBuf = Buffer.from(await r.arrayBuffer());
-        try {
-          composed = await sharp(bgBuf).composite([{ input: productPng }]).png().toBuffer();
-        } catch (_) {
-          composed = productPng;
+  try {
+    const bucket = process.env.S3_BUCKET as string;
+    if (!bucket) throw new Error("Missing S3_BUCKET");
+    const buf = Buffer.from(await (file as File).arrayBuffer());
+    const productPng = await reencodeToPng(buf);
+    const paths = buildTemplateAssetPaths(id);
+    // Load background image for this template
+    const supa = supabaseAdmin();
+    const { data: tmpl } = await supa
+      .from("templates")
+      .select("background_image_path")
+      .eq("id", id)
+      .single();
+    const bgKey: string | null = tmpl?.background_image_path || null;
+    let composed: Buffer = productPng;
+    if (bgKey) {
+      const bgUrl = await getSignedUrl({ bucket, key: bgKey, expiresInSeconds: 120 });
+      if (bgUrl) {
+        const r = await fetch(bgUrl);
+        if (r.ok) {
+          const bgBuf = Buffer.from(await r.arrayBuffer());
+          try {
+            composed = await sharp(bgBuf).composite([{ input: productPng }]).png().toBuffer();
+          } catch (_) {
+            composed = productPng;
+          }
         }
       }
     }
-  }
-  await uploadImage({ bucket, key: paths.preview, body: composed, contentType: "image/png", cacheControl: cacheControlForKey(paths.preview) });
-  const thumbs = await generateAndUploadThumbnails({ input: composed, bucket, outputBasePath: paths.base });
-  const t400 = thumbs.find((t) => t.size === 400)?.path || null;
-  const t600 = thumbs.find((t) => t.size === 600)?.path || null;
-  const { error: upErr } = await supa
-    .from("templates")
-    .update({ preview_image_path: paths.preview, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() })
-    .eq("id", id);
-  if (upErr) {
-    await supa
+    await uploadImageWithVerify({ bucket, key: paths.preview, body: composed, contentType: "image/png", cacheControl: cacheControlForKey(paths.preview) });
+    const thumbs = await generateAndUploadThumbnails({ input: composed, bucket, outputBasePath: paths.base });
+    const t400 = thumbs.find((t) => t.size === 400)?.path || null;
+    const t600 = thumbs.find((t) => t.size === 600)?.path || null;
+    const { error: upErr } = await supa
       .from("templates")
-      .update({ preview_image_path: paths.preview, updated_at: new Date().toISOString() })
+      .update({ preview_image_path: paths.preview, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() })
       .eq("id", id);
+    if (upErr) {
+      await supa
+        .from("templates")
+        .update({ preview_image_path: paths.preview, updated_at: new Date().toISOString() })
+        .eq("id", id);
+    }
+  } catch (e: any) {
+    revalidatePath("/admin/templates");
+    revalidatePath("/admin/templates1");
+    redirect(`/admin/templates1?err=${encodeURIComponent(e?.message || "Upload product failed")}`);
   }
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
@@ -218,19 +246,25 @@ async function addCategoryAction(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   const id = randomUUID();
-  const supa = supabaseAdmin();
-  const { error } = await supa.from("template_categories").insert({ id, name });
-  if (error) {
-    const msg = String(error.message || "");
-    // If table missing, fall back to legacy table
-    if (/Could not find the table|does not exist|schema cache/i.test(msg)) {
-      await supa.from("categories").insert({ id, name });
-    } else if (/duplicate key value|already exists|duplicate entry/i.test(msg)) {
-      // Ignore duplicates to behave like idempotent add
-    } else {
-      // Last resort: try legacy table as well
-      try { await supa.from("categories").insert({ id, name }); } catch {}
+  try {
+    const supa = supabaseAdmin();
+    const { error } = await supa.from("template_categories").insert({ id, name });
+    if (error) {
+      const msg = String(error.message || "");
+      // If table missing, fall back to legacy table
+      if (/Could not find the table|does not exist|schema cache/i.test(msg)) {
+        await supa.from("categories").insert({ id, name });
+      } else if (/duplicate key value|already exists|duplicate entry/i.test(msg)) {
+        // Ignore duplicates to behave like idempotent add
+      } else {
+        // Last resort: try legacy table as well
+        try { await supa.from("categories").insert({ id, name }); } catch {}
+      }
     }
+  } catch (e: any) {
+    revalidatePath("/admin/templates");
+    revalidatePath("/admin/templates1");
+    redirect(`/admin/templates1?err=${encodeURIComponent(e?.message || "Add category failed")}`);
   }
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
@@ -334,8 +368,16 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
 
   const createdId = typeof searchParams?.["created"] === "string" ? String(searchParams?.["created"]) : Array.isArray(searchParams?.["created"]) ? String(searchParams?.["created"]?.[0] || "") : "";
   const latestDraftId = createdId || (rows.find((t: any) => (t.status || "").toLowerCase() === "draft")?.id || "");
+  const errMsg = typeof searchParams?.["err"] === "string" ? String(searchParams?.["err"]) : Array.isArray(searchParams?.["err"]) ? String(searchParams?.["err"]?.[0] || "") : "";
+  const okMsg = typeof searchParams?.["msg"] === "string" ? String(searchParams?.["msg"]) : Array.isArray(searchParams?.["msg"]) ? String(searchParams?.["msg"]?.[0] || "") : "";
   return (
     <div className="p-8 space-y-6">
+      {errMsg ? (
+        <div className="rounded border border-red-300 bg-red-50 text-red-800 px-3 py-2">{errMsg}</div>
+      ) : null}
+      {okMsg ? (
+        <div className="rounded border border-green-300 bg-green-50 text-green-800 px-3 py-2">{okMsg}</div>
+      ) : null}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Admin Templates</h1>
         <Link className="px-3 py-2 rounded border text-sm bg-white text-black hover:bg-gray-50" href="/templates">View Public Templates</Link>

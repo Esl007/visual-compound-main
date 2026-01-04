@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { uploadImage, cacheControlForKey } from "@/lib/storage/b2";
+import { uploadImageWithVerify, cacheControlForKey } from "@/lib/storage/b2";
 import { buildTemplateAssetPaths } from "@/lib/images/paths";
 import { generateAndUploadThumbnails, reencodeToPng } from "@/lib/images/thumbs";
 
@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
     const adminToken = process.env.ADMIN_UPLOAD_TOKEN;
     if (!adminToken) return new Response(JSON.stringify({ error: "Missing ADMIN_UPLOAD_TOKEN" }), { status: 500 });
     const headerToken = req.headers.get("x-admin-token");
-    if (headerToken !== adminToken) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+    const cookieToken = req.cookies.get("admin-token")?.value;
+    if (headerToken !== adminToken && cookieToken !== adminToken) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
 
     const supa = supabaseAdmin();
     const body = await req.json();
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
 
     const paths = buildTemplateAssetPaths(templateId);
 
-    await uploadImage({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
+    await uploadImageWithVerify({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
 
     const thumbs = await generateAndUploadThumbnails({ input: png, bucket, outputBasePath: paths.base });
     const t400 = thumbs.find((t) => t.size === 400)?.path || null;
