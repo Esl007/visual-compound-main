@@ -65,6 +65,21 @@ export async function GET(req: NextRequest) {
     const bucket = process.env.S3_BUCKET as string;
     if (!bucket) return new Response(JSON.stringify({ error: "Missing S3_BUCKET" }), { status: 500 });
 
+    async function headIfExists(key: string) {
+      try {
+        const url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 });
+        const ac = new AbortController();
+        const t = setTimeout(() => ac.abort(), 2500);
+        try {
+          const r = await fetch(url, { method: "HEAD", signal: ac.signal } as any);
+          if (r.ok) return url;
+        } finally {
+          clearTimeout(t);
+        }
+      } catch {}
+      return null;
+    }
+
     const items = await Promise.all(
       (data || []).map(async (row: any) => {
         const out: any = {
@@ -78,14 +93,24 @@ export async function GET(req: NextRequest) {
         if (row.preview_image_path) {
           out.preview_url = await getSignedUrl({ bucket, key: row.preview_image_path, expiresInSeconds: 300 });
         } else if (row.background_image_path) {
-          // Fallback to background image for preview when a composed preview is not available yet
           out.preview_url = await getSignedUrl({ bucket, key: row.background_image_path, expiresInSeconds: 300 });
+        } else {
+          const base = `templates/${row.id}`;
+          const p = await headIfExists(`${base}/preview.png`);
+          const o = p ? null : await headIfExists(`${base}/original.png`);
+          out.preview_url = p || o || null;
         }
         if (row.thumbnail_400_path) {
           out.thumb_400_url = await getSignedUrl({ bucket, key: row.thumbnail_400_path, expiresInSeconds: 300 });
+        } else {
+          const t400 = await headIfExists(`templates/${row.id}/thumb_400.webp`);
+          if (t400) out.thumb_400_url = t400;
         }
         if (row.thumbnail_600_path) {
           out.thumb_600_url = await getSignedUrl({ bucket, key: row.thumbnail_600_path, expiresInSeconds: 300 });
+        } else {
+          const t600 = await headIfExists(`templates/${row.id}/thumb_600.webp`);
+          if (t600) out.thumb_600_url = t600;
         }
         return out;
       })
