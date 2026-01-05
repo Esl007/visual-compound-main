@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { uploadImageWithVerify, cacheControlForKey } from "@/lib/storage/b2";
+import { uploadImage, cacheControlForKey } from "@/lib/storage/b2";
 import { buildAdminTemplateAssetPaths } from "@/lib/images/paths";
 import { generateAndUploadThumbnails, reencodeToPng } from "@/lib/images/thumbs";
 
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
     const paths = buildAdminTemplateAssetPaths(templateId);
 
-    await uploadImageWithVerify({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
+    await uploadImage({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
 
     const thumbs = await generateAndUploadThumbnails({ input: png, bucket, outputBasePath: paths.base });
     const t400 = thumbs.find((t) => t.size === 400)?.path || null;

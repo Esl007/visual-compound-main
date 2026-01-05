@@ -2,7 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getSignedUrl } from "@/lib/storage/b2";
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { uploadImageWithVerify, cacheControlForKey } from "@/lib/storage/b2";
+import { uploadImageWithVerify, uploadImage, cacheControlForKey } from "@/lib/storage/b2";
 import { generateAndUploadThumbnails, reencodeToPng } from "@/lib/images/thumbs";
 import { buildAdminTemplateAssetPaths } from "@/lib/images/paths";
 import { revalidatePath } from "next/cache";
@@ -86,7 +86,7 @@ async function createTemplateAction(formData: FormData) {
         const buf = Buffer.from(await (bg as File).arrayBuffer());
         const png = await reencodeToPng(buf);
         const paths = buildAdminTemplateAssetPaths(id);
-        await uploadImageWithVerify({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
+        await uploadImage({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
         const thumbs = await generateAndUploadThumbnails({ input: png, bucket, outputBasePath: paths.base });
         t400 = thumbs.find((t) => t.size === 400)?.path || null;
         t600 = thumbs.find((t) => t.size === 600)?.path || null;
@@ -157,7 +157,7 @@ async function uploadBackgroundAction(formData: FormData) {
     const buf = Buffer.from(await (file as File).arrayBuffer());
     const png = await reencodeToPng(buf);
     const paths = buildAdminTemplateAssetPaths(id);
-    await uploadImageWithVerify({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
+    await uploadImage({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
     const thumbs = await generateAndUploadThumbnails({ input: png, bucket, outputBasePath: paths.base });
     const t400 = thumbs.find((t) => t.size === 400)?.path || null;
     const t600 = thumbs.find((t) => t.size === 600)?.path || null;
