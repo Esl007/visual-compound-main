@@ -75,8 +75,10 @@ export async function headObjectUrlIfExists(bucket: string, key: string, timeout
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort(), timeoutMs);
     try {
-      const r = await fetch(url, { method: "HEAD", signal: ac.signal } as any);
-      if (r.ok) return url;
+      // Some S3-compatible providers do not honor HEAD with presigned GET URLs.
+      // Use a ranged GET to fetch 1 byte as a lightweight existence check.
+      const r = await fetch(url, { method: "GET", headers: { Range: "bytes=0-0" }, signal: ac.signal } as any);
+      if (r.ok || r.status === 206) return url;
     } finally {
       clearTimeout(t);
     }
