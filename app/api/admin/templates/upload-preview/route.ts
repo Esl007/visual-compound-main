@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { uploadImageWithVerify, cacheControlForKey } from "@/lib/storage/b2";
-import { buildTemplateAssetPaths } from "@/lib/images/paths";
+import { buildAdminTemplateAssetPaths } from "@/lib/images/paths";
 import { reencodeToPng } from "@/lib/images/thumbs";
 
 export const runtime = "nodejs";
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     const bucket = process.env.S3_BUCKET as string;
     if (!bucket) return new Response(JSON.stringify({ error: "Missing S3_BUCKET" }), { status: 500 });
 
-    const paths = buildTemplateAssetPaths(templateId);
+    const paths = buildAdminTemplateAssetPaths(templateId);
 
     await uploadImageWithVerify({ bucket, key: paths.preview, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.preview) });
 

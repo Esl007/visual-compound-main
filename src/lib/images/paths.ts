@@ -31,3 +31,15 @@ export function buildTemplateAssetPaths(templateId: string) {
     thumb600: `${base}/thumb_600.webp`,
   } as const;
 }
+
+export function buildAdminTemplateAssetPaths(templateId: string) {
+  // Follow the working routing used by user images to satisfy Backblaze key prefix constraints
+  const base = `users/admin-templates/${templateId}`;
+  return {
+    base,
+    original: `${base}/original.png`,
+    preview: `${base}/preview.png`,
+    thumb400: `${base}/thumb_400.webp`,
+    thumb600: `${base}/thumb_600.webp`,
+  } as const;
+}

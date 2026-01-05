@@ -4,7 +4,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { uploadImageWithVerify, cacheControlForKey } from "@/lib/storage/b2";
 import { generateAndUploadThumbnails, reencodeToPng } from "@/lib/images/thumbs";
-import { buildTemplateAssetPaths } from "@/lib/images/paths";
+import { buildAdminTemplateAssetPaths } from "@/lib/images/paths";
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import { redirect } from "next/navigation";
@@ -70,7 +70,6 @@ async function createTemplateAction(formData: FormData) {
   try {
     const supa = supabaseAdmin();
     const bucket = process.env.S3_BUCKET as string;
-    const paths = buildTemplateAssetPaths(id);
     let bgPath: string | null = null;
     let previewPath: string | null = null;
     let t400: string | null = null;
@@ -86,6 +85,7 @@ async function createTemplateAction(formData: FormData) {
       if (bg) {
         const buf = Buffer.from(await (bg as File).arrayBuffer());
         const png = await reencodeToPng(buf);
+        const paths = buildAdminTemplateAssetPaths(id);
         await uploadImageWithVerify({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
         const thumbs = await generateAndUploadThumbnails({ input: png, bucket, outputBasePath: paths.base });
         t400 = thumbs.find((t) => t.size === 400)?.path || null;
@@ -96,6 +96,7 @@ async function createTemplateAction(formData: FormData) {
       if (comp) {
         const buf2 = Buffer.from(await (comp as File).arrayBuffer());
         const png2 = await reencodeToPng(buf2);
+        const paths = buildAdminTemplateAssetPaths(id);
         await uploadImageWithVerify({ bucket, key: paths.preview, body: png2, contentType: "image/png", cacheControl: cacheControlForKey(paths.preview) });
         const thumbs2 = await generateAndUploadThumbnails({ input: png2, bucket, outputBasePath: paths.base });
         t400 = thumbs2.find((t) => t.size === 400)?.path || t400;
@@ -155,7 +156,7 @@ async function uploadBackgroundAction(formData: FormData) {
     if (!bucket) throw new Error("Missing S3_BUCKET");
     const buf = Buffer.from(await (file as File).arrayBuffer());
     const png = await reencodeToPng(buf);
-    const paths = buildTemplateAssetPaths(id);
+    const paths = buildAdminTemplateAssetPaths(id);
     await uploadImageWithVerify({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
     const thumbs = await generateAndUploadThumbnails({ input: png, bucket, outputBasePath: paths.base });
     const t400 = thumbs.find((t) => t.size === 400)?.path || null;
@@ -192,7 +193,7 @@ async function uploadCompositeAction(formData: FormData) {
     if (!bucket) throw new Error("Missing S3_BUCKET");
     const buf = Buffer.from(await (file as File).arrayBuffer());
     const productPng = await reencodeToPng(buf);
-    const paths = buildTemplateAssetPaths(id);
+    const paths = buildAdminTemplateAssetPaths(id);
     // Load background image for this template
     const supa = supabaseAdmin();
     const { data: tmpl } = await supa
