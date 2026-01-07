@@ -2,7 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getSignedUrl } from "@/lib/storage/b2";
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { uploadImageWithVerify, uploadImage, cacheControlForKey } from "@/lib/storage/b2";
+import { uploadImageWithVerify, uploadImage, cacheControlForKey, deleteImage } from "@/lib/storage/b2";
 import { generateAndUploadThumbnails, reencodeToPng } from "@/lib/images/thumbs";
 import { buildAdminTemplateAssetPaths } from "@/lib/images/paths";
 import { revalidatePath } from "next/cache";
@@ -29,6 +29,7 @@ async function publishAction(formData: FormData) {
       if (error) {
         await supa.from("templates").update({ status: "published", updated_at: new Date().toISOString() }).eq("id", id);
       }
+    
     } else {
       await supa.from("templates").update({ status, updated_at: new Date().toISOString() }).eq("id", id);
     }
@@ -36,6 +37,98 @@ async function publishAction(formData: FormData) {
     revalidatePath("/admin/templates");
     revalidatePath("/admin/templates1");
     redirect(`/admin/templates1?err=${encodeURIComponent(e?.message || "Publish failed")}`);
+  }
+  revalidatePath("/admin/templates");
+  revalidatePath("/admin/templates1");
+}
+
+// Server actions added for admin/templates1 enhancements
+async function updatePromptsAction(formData: FormData) {
+  "use server";
+  const id = String(formData.get("id") || "");
+  const background_prompt = formData.get("background_prompt") ? String(formData.get("background_prompt")) : null;
+  const product_prompt = formData.get("product_prompt") ? String(formData.get("product_prompt")) : null;
+  if (!id) return;
+  try {
+    const supa = supabaseAdmin();
+    await supa
+      .from("templates")
+      .update({ background_prompt, product_prompt, updated_at: new Date().toISOString() })
+      .eq("id", id);
+  } catch (e: any) {
+    revalidatePath("/admin/templates");
+    revalidatePath("/admin/templates1");
+    redirect(`/admin/templates1?err=${encodeURIComponent(e?.message || "Save prompts failed")}`);
+  }
+  revalidatePath("/admin/templates");
+  revalidatePath("/admin/templates1");
+}
+
+async function updateTagsAction(formData: FormData) {
+  "use server";
+  const id = String(formData.get("id") || "");
+  const tagsText = String(formData.get("tags") || "");
+  if (!id) return;
+  const tags = Array.from(new Set(tagsText.split(",").map((t) => t.trim()).filter(Boolean))).slice(0, 20);
+  try {
+    const supa = supabaseAdmin();
+    // First try direct column on templates (text[] / jsonb[])
+    const { error } = await supa.from("templates").update({ tags, updated_at: new Date().toISOString() } as any).eq("id", id);
+    if (error) {
+      // Fallback: try metadata JSON column merge
+      try {
+        const { data: row } = await supa.from("templates").select("metadata").eq("id", id).single();
+        const meta = (row?.metadata && typeof row.metadata === "object") ? row.metadata : {};
+        (meta as any).tags = tags;
+        const { error: e2 } = await supa.from("templates").update({ metadata: meta, updated_at: new Date().toISOString() } as any).eq("id", id);
+        if (!e2) {
+          revalidatePath("/admin/templates");
+          revalidatePath("/admin/templates1");
+          return;
+        }
+      } catch {}
+      // Last fallback: use template_tags mapping table (delete + insert)
+      try {
+        await supa.from("template_tags").delete().eq("template_id", id);
+        if (tags.length) {
+          await supa.from("template_tags").insert(tags.map((tag) => ({ template_id: id, tag })) as any);
+        }
+      } catch {}
+    }
+  } catch (e: any) {
+    revalidatePath("/admin/templates");
+    revalidatePath("/admin/templates1");
+    redirect(`/admin/templates1?err=${encodeURIComponent(e?.message || "Save tags failed")}`);
+  }
+  revalidatePath("/admin/templates");
+  revalidatePath("/admin/templates1");
+}
+
+async function deleteDraftAction(formData: FormData) {
+  "use server";
+  const id = String(formData.get("id") || "");
+  if (!id) return;
+  try {
+    const supa = supabaseAdmin();
+    const bucket = process.env.S3_BUCKET as string;
+    // Load paths to delete
+    const { data: t } = await supa
+      .from("templates")
+      .select("background_image_path, preview_image_path, thumbnail_400_path, thumbnail_600_path, status")
+      .eq("id", id)
+      .single();
+    if ((t?.status || "").toLowerCase() === "published") {
+      throw new Error("Cannot delete a published template");
+    }
+    const keys = [t?.background_image_path, t?.preview_image_path, t?.thumbnail_400_path, t?.thumbnail_600_path].filter(Boolean) as string[];
+    for (const key of keys) {
+      try { await deleteImage({ bucket, key }); } catch {}
+    }
+    await supa.from("templates").delete().eq("id", id);
+  } catch (e: any) {
+    revalidatePath("/admin/templates");
+    revalidatePath("/admin/templates1");
+    redirect(`/admin/templates1?err=${encodeURIComponent(e?.message || "Delete failed")}`);
   }
   revalidatePath("/admin/templates");
   revalidatePath("/admin/templates1");
@@ -309,22 +402,35 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
     }
   } catch (_) {
   }
+  // Sync categories between legacy and new tables so dropdown always reflects additions
+  try {
+    const { data: tcats } = await supa.from("template_categories").select("name");
+    const { data: lcats } = await supa.from("categories").select("name");
+    const tset = new Set((tcats || []).map((r: any) => String(r.name).trim().toLowerCase()));
+    const toAdd = (lcats || []).map((r: any) => String(r.name).trim()).filter((n) => n && !tset.has(n.toLowerCase()));
+    if (toAdd.length) {
+      await supa.from("template_categories").insert(toAdd.map((name) => ({ id: randomUUID(), name })) as any);
+    }
+  } catch {}
   let categories: any[] | null = null;
   let usingLegacyCategories = false;
   {
-    const { data, error } = await supa
-      .from("template_categories")
-      .select("id,name")
-      .order("name", { ascending: true });
-    if (!error && (data || []).length > 0) {
-      categories = data || [];
+    let tcat: any[] = [];
+    try {
+      const { data } = await supa.from("template_categories").select("id,name").order("name", { ascending: true });
+      tcat = data || [];
+    } catch {}
+    let lcat: any[] = [];
+    try {
+      const { data } = await supa.from("categories").select("id,name").order("name", { ascending: true });
+      lcat = data || [];
+    } catch {}
+    if ((tcat || []).length > 0) {
+      categories = tcat;
+      usingLegacyCategories = false;
     } else {
+      categories = lcat;
       usingLegacyCategories = true;
-      const { data: data2 } = await supa
-        .from("categories")
-        .select("id,name")
-        .order("name", { ascending: true });
-      categories = data2 || [];
     }
   }
   let data: any[] | null = null;
@@ -511,6 +617,27 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
                     <input type="hidden" name="id" value={t.id} />
                     <input required type="file" name="product" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
                     <PendingButton pendingText="Uploading..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Product</PendingButton>
+                  </form>
+                  <form action={updatePromptsAction} method="POST" className="space-y-2">
+                    <input type="hidden" name="id" value={t.id} />
+                    <div>
+                      <label className="block text-xs mb-1">Background Prompt</label>
+                      <textarea name="background_prompt" rows={2} defaultValue={t.background_prompt || ""} className="w-full px-2 py-1 border rounded bg-white text-black text-xs placeholder:text-gray-500"></textarea>
+                    </div>
+                    <div>
+                      <label className="block text-xs mb-1">Product Prompt</label>
+                      <textarea name="product_prompt" rows={2} defaultValue={t.product_prompt || ""} className="w-full px-2 py-1 border rounded bg-white text-black text-xs placeholder:text-gray-500"></textarea>
+                    </div>
+                    <PendingButton pendingText="Saving..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Save Prompts</PendingButton>
+                  </form>
+                  <form action={updateTagsAction} method="POST" className="flex items-center gap-2">
+                    <input type="hidden" name="id" value={t.id} />
+                    <input name="tags" placeholder="tag1, tag2" defaultValue={Array.isArray(t.tags) ? t.tags.join(", ") : (Array.isArray(t.metadata?.tags) ? t.metadata.tags.join(", ") : "")} className="flex-1 px-2 py-1 border rounded bg-white text-black text-xs placeholder:text-gray-500" />
+                    <PendingButton pendingText="Saving..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Save Tags</PendingButton>
+                  </form>
+                  <form action={deleteDraftAction} method="POST" className="pt-1">
+                    <input type="hidden" name="id" value={t.id} />
+                    <PendingButton pendingText="Deleting..." className="px-3 py-1.5 rounded bg-red-600 text-white text-sm hover:bg-red-700">Delete Draft</PendingButton>
                   </form>
                   <Link className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700" href={`/generate?templateId=${t.id}`}>Use</Link>
                 </td>
