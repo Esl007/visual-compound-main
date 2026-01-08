@@ -134,6 +134,47 @@ async function deleteDraftAction(formData: FormData) {
   revalidatePath("/admin/templates1");
 }
 
+async function updateCategoryAction(formData: FormData) {
+  "use server";
+  const id = String(formData.get("id") || "");
+  const category_id = formData.get("category_id") ? String(formData.get("category_id")) : "";
+  const category = formData.get("category") ? String(formData.get("category")) : "";
+  if (!id) return;
+  try {
+    const supa = supabaseAdmin();
+    const { data: tmpl } = await supa.from("templates").select("status").eq("id", id).single();
+    if ((tmpl?.status || "").toLowerCase() !== "draft") {
+      redirect(`/admin/templates1?err=${encodeURIComponent("Category can only be changed while draft")}`);
+    }
+    let name: string | null = null;
+    let catId: string | null = null;
+    if (category_id) {
+      catId = category_id;
+      const { data: cat } = await supa.from("template_categories").select("name").eq("id", category_id).single();
+      name = cat?.name || null;
+    } else if (category) {
+      name = category;
+    } else {
+      return;
+    }
+    const payload: any = { updated_at: new Date().toISOString() };
+    if (name !== null) payload.category = name;
+    if (catId) payload.category_id = catId;
+    const { error } = await supa.from("templates").update(payload).eq("id", id);
+    if (error) {
+      if (name !== null) {
+        await supa.from("templates").update({ category: name, updated_at: new Date().toISOString() } as any).eq("id", id);
+      }
+    }
+  } catch (e: any) {
+    revalidatePath("/admin/templates");
+    revalidatePath("/admin/templates1");
+    redirect(`/admin/templates1?err=${encodeURIComponent(e?.message || "Update category failed")}`);
+  }
+  revalidatePath("/admin/templates");
+  revalidatePath("/admin/templates1");
+}
+
 async function toggleFeaturedAction(formData: FormData) {
   "use server";
   const id = String(formData.get("id") || "");
@@ -580,7 +621,30 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
                   <div className="font-medium">{t.title}</div>
                   <div className="text-muted-foreground text-xs">{t.id}</div>
                 </td>
-                <td className="p-2">{t.category_name || t.category || "-"}</td>
+                <td className="p-2">
+                  {String(t.status || "").toLowerCase() === "draft" ? (
+                    <form action={updateCategoryAction} method="POST" className="flex items-center gap-2">
+                      <input type="hidden" name="id" value={t.id} />
+                      {((categories || []).length > 0) ? (
+                        <select
+                          name={usingLegacyCategories ? "category" : "category_id"}
+                          defaultValue={usingLegacyCategories ? (t.category || "") : (t.category_id || "")}
+                          className="px-2 py-1 border rounded bg-white text-black text-sm"
+                        >
+                          <option value="">Select a category</option>
+                          {(categories || []).map((c: any) => (
+                            <option key={c.id} value={usingLegacyCategories ? c.name : c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input name="category" defaultValue={t.category || ""} placeholder="Category" className="px-2 py-1 border rounded bg-white text-black text-sm placeholder:text-gray-500" />
+                      )}
+                      <PendingButton pendingText="Saving..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Save</PendingButton>
+                    </form>
+                  ) : (
+                    <span>{t.category_name || t.category || "-"}</span>
+                  )}
+                </td>
                 <td className="p-2">
                   <form action={publishAction} method="POST" className="flex items-center gap-2">
                     <input type="hidden" name="id" value={t.id} />
