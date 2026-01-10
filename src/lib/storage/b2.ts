@@ -1,9 +1,38 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, GetBucketCorsCommand, PutBucketCorsCommand, CORSRule } from "@aws-sdk/client-s3";
 import { getSignedUrl as presign } from "@aws-sdk/s3-request-presigner";
 
 function truthy(v: any) {
   if (typeof v === "string") return v.toLowerCase() === "true" || v === "1";
   return Boolean(v);
+}
+
+// Ensure B2 bucket has permissive CORS for browser-based presigned PUTs.
+// Allowed origins can be specific domains; default to '*'.
+export async function ensureBucketCors(bucket: string, allowedOrigins: string[] = ["*"]) {
+  const client = b2Client();
+  try {
+    const current = await client.send(new GetBucketCorsCommand({ Bucket: bucket }));
+    const rules = current.CORSRules || [];
+    // Check if there is at least one rule that allows PUT/GET/HEAD from any of the allowed origins
+    const hasRule = rules.some((r) => {
+      const methods = new Set((r.AllowedMethods || []).map((m) => m.toUpperCase()));
+      const origins = new Set((r.AllowedOrigins || []).map((o) => o.toLowerCase()));
+      const methodOk = methods.has("PUT") && methods.has("GET") && methods.has("HEAD");
+      const originOk = allowedOrigins.some((o) => origins.has(o.toLowerCase()) || origins.has("*"));
+      return methodOk && originOk;
+    });
+    if (hasRule) return;
+  } catch (_) {
+    // Missing CORS config; proceed to set it.
+  }
+  const rule: CORSRule = {
+    AllowedMethods: ["GET", "PUT", "HEAD", "POST"],
+    AllowedOrigins: allowedOrigins,
+    AllowedHeaders: ["*"],
+    ExposeHeaders: ["ETag", "x-amz-request-id", "x-amz-id-2"],
+    MaxAgeSeconds: 3000,
+  };
+  await client.send(new PutBucketCorsCommand({ Bucket: bucket, CORSConfiguration: { CORSRules: [rule] } }));
 }
 
 export function b2Client() {

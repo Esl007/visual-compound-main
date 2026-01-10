@@ -11,6 +11,7 @@ type Props = {
 export default function DirectUpload({ id, kind, label, token }: Props) {
   const [pending, setPending] = React.useState(false);
   const [file, setFile] = React.useState<File | null>(null);
+  const LARGE_THRESHOLD = 4_400_000; // ~4.2MB, avoid Vercel function payload limits on fallback
 
   const onChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     setFile(e.target.files?.[0] || null);
@@ -39,7 +40,11 @@ export default function DirectUpload({ id, kind, label, token }: Props) {
         if (!uploadRes.ok) throw new Error(`upload failed: status ${uploadRes.status}`);
       } catch (err) {
         // CORS/network or provider error — fallback to server-side direct upload (multipart)
-        console.warn("Presigned PUT failed, using fallback direct-upload", err);
+        console.warn("Presigned PUT failed", err);
+        if (file.size > LARGE_THRESHOLD) {
+          throw new Error("Direct PUT failed and file is too large for fallback route (>4MB). Please retry; CORS has been auto-configured. If this persists, reload and try again.");
+        }
+        // small files: ok to fallback
         const fd = new FormData();
         fd.set("id", id);
         fd.set("kind", kind);

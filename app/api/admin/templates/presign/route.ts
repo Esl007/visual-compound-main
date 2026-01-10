@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getSignedPutUrl } from "@/lib/storage/b2";
+import { getSignedPutUrl, ensureBucketCors } from "@/lib/storage/b2";
 import { buildAdminTemplateAssetPaths } from "@/lib/images/paths";
 
 export const runtime = "nodejs";
@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
     else if (kind === "product") key = paths.preview; // stage product to preview key, will be processed
     else return new Response(JSON.stringify({ error: "Invalid kind" }), { status: 400 });
 
+    // Ensure permissive CORS so browser PUT works cross-origin
+    try { await ensureBucketCors(bucket, ["*"]); } catch {}
     const putUrl = await getSignedPutUrl({ bucket, key, contentType: String(mimeType || "application/octet-stream") });
     return new Response(JSON.stringify({ putUrl, key }), { status: 200, headers: { "content-type": "application/json" } });
   } catch (e: any) {
