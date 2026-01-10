@@ -19,27 +19,45 @@ export default function DirectUpload({ id, kind, label }: Props) {
     if (!file) return;
     setPending(true);
     try {
+      // Try presigned PUT path first
       const presignRes = await fetch("/api/admin/templates/presign", {
         method: "POST",
+        credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ templateId: id, kind, mimeType: file.type || "application/octet-stream" }),
       });
       if (!presignRes.ok) throw new Error(`presign failed: ${await presignRes.text()}`);
       const { putUrl } = await presignRes.json();
 
-      const uploadRes = await fetch(putUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-        body: file,
-      });
-      if (!uploadRes.ok) throw new Error(`upload failed: status ${uploadRes.status}`);
+      let usedFallback = false;
+      try {
+        const uploadRes = await fetch(putUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file,
+        });
+        if (!uploadRes.ok) throw new Error(`upload failed: status ${uploadRes.status}`);
+      } catch (err) {
+        // CORS/network or provider error — fallback to server-side direct upload (multipart)
+        console.warn("Presigned PUT failed, using fallback direct-upload", err);
+        const fd = new FormData();
+        fd.set("id", id);
+        fd.set("kind", kind);
+        fd.set("file", file);
+        const fb = await fetch("/api/admin/templates/direct-upload", { method: "POST", credentials: "include", body: fd });
+        if (!fb.ok) throw new Error(`fallback upload failed: ${await fb.text()}`);
+        usedFallback = true;
+      }
 
-      const procRes = await fetch("/api/admin/templates/process-upload", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ templateId: id, kind }),
-      });
-      if (!procRes.ok) throw new Error(`process failed: ${await procRes.text()}`);
+      if (!usedFallback) {
+        const procRes = await fetch("/api/admin/templates/process-upload", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ templateId: id, kind }),
+        });
+        if (!procRes.ok) throw new Error(`process failed: ${await procRes.text()}`);
+      }
 
       // Refresh page to reflect new preview/thumbs
       window.location.reload();
