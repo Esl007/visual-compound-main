@@ -10,9 +10,15 @@ function truthy(v: any) {
 // Allowed origins can be specific domains; default to '*'.
 export async function ensureBucketCors(bucket: string, allowedOrigins: string[] = ["*"]) {
   const client = b2Client();
+  let existingOrigins: string[] = [];
   try {
     const current = await client.send(new GetBucketCorsCommand({ Bucket: bucket }));
     const rules = current.CORSRules || [];
+    existingOrigins = Array.from(
+      new Set(
+        rules.flatMap((r) => (r.AllowedOrigins || [])).map((o) => o.trim()).filter(Boolean)
+      )
+    );
     // Check if there is at least one rule that allows PUT/GET/HEAD from any of the allowed origins
     const hasRule = rules.some((r) => {
       const methods = new Set((r.AllowedMethods || []).map((m) => m.toUpperCase()));
@@ -25,9 +31,10 @@ export async function ensureBucketCors(bucket: string, allowedOrigins: string[] 
   } catch (_) {
     // Missing CORS config; proceed to set it.
   }
+  const finalOrigins = Array.from(new Set(["*", ...existingOrigins, ...allowedOrigins]));
   const rule: CORSRule = {
     AllowedMethods: ["GET", "PUT", "HEAD", "POST"],
-    AllowedOrigins: allowedOrigins,
+    AllowedOrigins: finalOrigins,
     AllowedHeaders: ["*"],
     ExposeHeaders: ["ETag", "x-amz-request-id", "x-amz-id-2"],
     MaxAgeSeconds: 3000,

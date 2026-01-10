@@ -24,8 +24,17 @@ export async function POST(req: NextRequest) {
     else if (kind === "product") key = paths.preview; // stage product to preview key, will be processed
     else return new Response(JSON.stringify({ error: "Invalid kind" }), { status: 400 });
 
-    // Ensure permissive CORS so browser PUT works cross-origin
-    try { await ensureBucketCors(bucket, ["*"]); } catch {}
+    // Ensure CORS allows current origin (and some known hosts) so browser PUT works cross-origin
+    const reqOrigin = req.headers.get("origin") || undefined;
+    const knownOrigins = [
+      reqOrigin,
+      process.env.NEXT_PUBLIC_SITE_URL,
+      "https://visual-compound-main.vercel.app",
+      "https://vizualyai.com",
+      "https://www.vizualyai.com",
+      "http://localhost:3000",
+    ].filter(Boolean) as string[];
+    try { await ensureBucketCors(bucket, knownOrigins.length ? knownOrigins : ["*"]); } catch {}
     const putUrl = await getSignedPutUrl({ bucket, key, contentType: String(mimeType || "application/octet-stream") });
     return new Response(JSON.stringify({ putUrl, key }), { status: 200, headers: { "content-type": "application/json" } });
   } catch (e: any) {
