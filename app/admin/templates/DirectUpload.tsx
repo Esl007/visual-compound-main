@@ -5,9 +5,10 @@ type Props = {
   id: string;
   kind: "background" | "product";
   label?: string;
+  token?: string;
 };
 
-export default function DirectUpload({ id, kind, label }: Props) {
+export default function DirectUpload({ id, kind, label, token }: Props) {
   const [pending, setPending] = React.useState(false);
   const [file, setFile] = React.useState<File | null>(null);
 
@@ -23,13 +24,12 @@ export default function DirectUpload({ id, kind, label }: Props) {
       const presignRes = await fetch("/api/admin/templates/presign", {
         method: "POST",
         credentials: "include",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...(token ? { "x-admin-token": token } : {}) },
         body: JSON.stringify({ templateId: id, kind, mimeType: file.type || "application/octet-stream" }),
       });
       if (!presignRes.ok) throw new Error(`presign failed: ${await presignRes.text()}`);
       const { putUrl } = await presignRes.json();
 
-      let usedFallback = false;
       try {
         const uploadRes = await fetch(putUrl, {
           method: "PUT",
@@ -44,20 +44,18 @@ export default function DirectUpload({ id, kind, label }: Props) {
         fd.set("id", id);
         fd.set("kind", kind);
         fd.set("file", file);
-        const fb = await fetch("/api/admin/templates/direct-upload", { method: "POST", credentials: "include", body: fd });
+        const fb = await fetch("/api/admin/templates/direct-upload", { method: "POST", credentials: "include", headers: { ...(token ? { "x-admin-token": token } : {}) }, body: fd });
         if (!fb.ok) throw new Error(`fallback upload failed: ${await fb.text()}`);
-        usedFallback = true;
       }
 
-      if (!usedFallback) {
-        const procRes = await fetch("/api/admin/templates/process-upload", {
-          method: "POST",
-          credentials: "include",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ templateId: id, kind }),
-        });
-        if (!procRes.ok) throw new Error(`process failed: ${await procRes.text()}`);
-      }
+      // Always process after upload (either presigned PUT or fallback multipart)
+      const procRes = await fetch("/api/admin/templates/process-upload", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json", ...(token ? { "x-admin-token": token } : {}) },
+        body: JSON.stringify({ templateId: id, kind }),
+      });
+      if (!procRes.ok) throw new Error(`process failed: ${await procRes.text()}`);
 
       // Refresh page to reflect new preview/thumbs
       window.location.reload();
@@ -72,7 +70,7 @@ export default function DirectUpload({ id, kind, label }: Props) {
   return (
     <div className="flex items-center gap-2">
       <input onChange={onChange} type="file" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
-      <button onClick={onUpload} disabled={!file || pending} className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50">
+      <button type="button" onClick={onUpload} disabled={!file || pending} className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50">
         {pending ? "Uploading..." : (label || "Upload")}
       </button>
     </div>

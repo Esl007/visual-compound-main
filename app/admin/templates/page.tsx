@@ -534,8 +534,8 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
             <Link href="/admin/templates1" className="text-sm underline">Close</Link>
           </div>
           <div className="grid md:grid-cols-2 gap-3">
-            <DirectUpload id={latestDraftId} kind="background" label="Upload BG" />
-            <DirectUpload id={latestDraftId} kind="product" label="Upload Product" />
+            <DirectUpload id={latestDraftId} kind="background" label="Upload BG" token={token} />
+            <DirectUpload id={latestDraftId} kind="product" label="Upload Product" token={token} />
           </div>
         </div>
       ) : null}
@@ -657,8 +657,8 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
                   </form>
                 </td>
                 <td className="p-2 space-y-2">
-                  <DirectUpload id={t.id} kind="background" label="Upload BG" />
-                  <DirectUpload id={t.id} kind="product" label="Upload Product" />
+                  <DirectUpload id={t.id} kind="background" label="Upload BG" token={token} />
+                  <DirectUpload id={t.id} kind="product" label="Upload Product" token={token} />
                   <form action={updatePromptsAction} method="POST" className="space-y-2">
                     <input type="hidden" name="id" value={t.id} />
                     <div>
