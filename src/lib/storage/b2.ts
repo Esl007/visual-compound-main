@@ -61,6 +61,13 @@ export async function getSignedUrl(params: { bucket: string; key: string; expire
   return url;
 }
 
+export async function getSignedPutUrl(params: { bucket: string; key: string; contentType?: string; expiresInSeconds?: number }) {
+  const client = b2Client();
+  const cmd = new PutObjectCommand({ Bucket: params.bucket, Key: params.key, ContentType: params.contentType });
+  const url = await presign(client, cmd, { expiresIn: params.expiresInSeconds ?? 600 });
+  return url;
+}
+
 export function cacheControlForKey(key: string) {
   if (key.startsWith("templates/")) return "public, max-age=31536000, immutable";
   // Long-lived CDN caching for user images. Objects are immutable by id, so safe to cache long on CDN.

@@ -10,6 +10,7 @@ import { randomUUID } from "crypto";
 import { redirect } from "next/navigation";
 import sharp from "sharp";
 import { PendingButton } from "./PendingButton";
+import DirectUpload from "./DirectUpload";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -142,10 +143,6 @@ async function updateCategoryAction(formData: FormData) {
   if (!id) return;
   try {
     const supa = supabaseAdmin();
-    const { data: tmpl } = await supa.from("templates").select("status").eq("id", id).single();
-    if ((tmpl?.status || "").toLowerCase() !== "draft") {
-      redirect(`/admin/templates1?err=${encodeURIComponent("Category can only be changed while draft")}`);
-    }
     let name: string | null = null;
     let catId: string | null = null;
     if (category_id) {
@@ -537,16 +534,8 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
             <Link href="/admin/templates1" className="text-sm underline">Close</Link>
           </div>
           <div className="grid md:grid-cols-2 gap-3">
-            <form action={uploadBackgroundAction} method="POST" encType="multipart/form-data" className="flex items-center gap-2">
-              <input type="hidden" name="id" value={latestDraftId} />
-              <input required type="file" name="background" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
-              <PendingButton pendingText="Uploading..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG</PendingButton>
-            </form>
-            <form action={uploadCompositeAction} method="POST" encType="multipart/form-data" className="flex items-center gap-2">
-              <input type="hidden" name="id" value={latestDraftId} />
-              <input required type="file" name="product" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
-              <PendingButton pendingText="Uploading..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Product</PendingButton>
-            </form>
+            <DirectUpload id={latestDraftId} kind="background" label="Upload BG" />
+            <DirectUpload id={latestDraftId} kind="product" label="Upload Product" />
           </div>
         </div>
       ) : null}
@@ -622,28 +611,24 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
                   <div className="text-muted-foreground text-xs">{t.id}</div>
                 </td>
                 <td className="p-2">
-                  {String(t.status || "").toLowerCase() === "draft" ? (
-                    <form action={updateCategoryAction} method="POST" className="flex items-center gap-2">
-                      <input type="hidden" name="id" value={t.id} />
-                      {((categories || []).length > 0) ? (
-                        <select
-                          name={usingLegacyCategories ? "category" : "category_id"}
-                          defaultValue={usingLegacyCategories ? (t.category || "") : (t.category_id || "")}
-                          className="px-2 py-1 border rounded bg-white text-black text-sm"
-                        >
-                          <option value="">Select a category</option>
-                          {(categories || []).map((c: any) => (
-                            <option key={c.id} value={usingLegacyCategories ? c.name : c.id}>{c.name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input name="category" defaultValue={t.category || ""} placeholder="Category" className="px-2 py-1 border rounded bg-white text-black text-sm placeholder:text-gray-500" />
-                      )}
-                      <PendingButton pendingText="Saving..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Save</PendingButton>
-                    </form>
-                  ) : (
-                    <span>{t.category_name || t.category || "-"}</span>
-                  )}
+                  <form action={updateCategoryAction} method="POST" className="flex items-center gap-2">
+                    <input type="hidden" name="id" value={t.id} />
+                    {((categories || []).length > 0) ? (
+                      <select
+                        name={usingLegacyCategories ? "category" : "category_id"}
+                        defaultValue={usingLegacyCategories ? (t.category || "") : (t.category_id || "")}
+                        className="px-2 py-1 border rounded bg-white text-black text-sm"
+                      >
+                        <option value="">Select a category</option>
+                        {(categories || []).map((c: any) => (
+                          <option key={c.id} value={usingLegacyCategories ? c.name : c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input name="category" defaultValue={t.category || ""} placeholder="Category" className="px-2 py-1 border rounded bg-white text-black text-sm placeholder:text-gray-500" />
+                    )}
+                    <PendingButton pendingText="Saving..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Save</PendingButton>
+                  </form>
                 </td>
                 <td className="p-2">
                   <form action={publishAction} method="POST" className="flex items-center gap-2">
@@ -672,16 +657,8 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
                   </form>
                 </td>
                 <td className="p-2 space-y-2">
-                  <form action={uploadBackgroundAction} method="POST" className="flex items-center gap-2" encType="multipart/form-data">
-                    <input type="hidden" name="id" value={t.id} />
-                    <input required type="file" name="background" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
-                    <PendingButton pendingText="Uploading..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload BG</PendingButton>
-                  </form>
-                  <form action={uploadCompositeAction} method="POST" className="flex items-center gap-2" encType="multipart/form-data">
-                    <input type="hidden" name="id" value={t.id} />
-                    <input required type="file" name="product" accept="image/*" className="block text-sm bg-white text-black border rounded px-2 py-1" />
-                    <PendingButton pendingText="Uploading..." className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Upload Product</PendingButton>
-                  </form>
+                  <DirectUpload id={t.id} kind="background" label="Upload BG" />
+                  <DirectUpload id={t.id} kind="product" label="Upload Product" />
                   <form action={updatePromptsAction} method="POST" className="space-y-2">
                     <input type="hidden" name="id" value={t.id} />
                     <div>
