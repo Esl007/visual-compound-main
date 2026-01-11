@@ -36,9 +36,17 @@ export async function ensureBucketCors(bucket: string, allowedOrigins: string[] 
   const rule: CORSRule = {
     AllowedMethods: ["GET", "PUT", "HEAD", "POST"],
     AllowedOrigins: finalOrigins,
-    AllowedHeaders: ["*"],
+    AllowedHeaders: [
+      "*",
+      "Authorization",
+      "Content-Type",
+      "x-amz-*",
+      "x-amz-meta-*",
+      "x-amz-sdk-checksum-algorithm",
+      "x-amz-checksum-crc32",
+    ],
     ExposeHeaders: ["ETag", "x-amz-request-id", "x-amz-id-2"],
-    MaxAgeSeconds: 3000,
+    MaxAgeSeconds: 86400,
   };
   await client.send(new PutBucketCorsCommand({ Bucket: bucket, CORSConfiguration: { CORSRules: [rule] } }));
   return { changed: true, effectiveOrigins: finalOrigins };
@@ -213,7 +221,15 @@ export async function ensureBucketCorsNative(bucketName: string, allowedOrigins:
       {
         corsRuleName: "public-wildcard",
         allowedOrigins: finalOrigins,
-        allowedHeaders: ["*"],
+        allowedHeaders: [
+          "*",
+          "Authorization",
+          "Content-Type",
+          "x-amz-*",
+          "x-amz-meta-*",
+          "x-amz-sdk-checksum-algorithm",
+          "x-amz-checksum-crc32",
+        ],
         allowedOperations: [
           "b2_upload_file",
           "b2_download_file_by_id",
@@ -224,7 +240,7 @@ export async function ensureBucketCorsNative(bucketName: string, allowedOrigins:
           "s3_post",
         ],
         exposeHeaders: ["ETag", "x-bz-file-id", "x-bz-file-name", "x-bz-content-sha1"],
-        maxAgeSeconds: 3000,
+        maxAgeSeconds: 86400,
       },
     ];
     const updateUrl = `${auth.apiUrl}/b2api/v2/b2_update_bucket`;

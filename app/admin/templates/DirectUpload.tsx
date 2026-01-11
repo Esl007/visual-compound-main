@@ -78,7 +78,8 @@ export default function DirectUpload({ id, kind, label, token }: Props) {
             body: JSON.stringify({ templateId: id, kind, mimeType: file.type || "application/octet-stream" }),
           });
           if (!postPresign.ok) throw new Error(`presign-post failed: ${await postPresign.text()}`);
-          const { url: postUrl, fields, key: postKey } = await postPresign.json();
+          const { url: postUrl, fields, key: postKey, corsInfo: postCorsInfo } = await postPresign.json();
+          if (postCorsInfo) console.log("presignPost.corsInfo", postCorsInfo);
           const fdDirect = new FormData();
           Object.entries(fields || {}).forEach(([k, v]) => fdDirect.append(k, String(v)));
           fdDirect.append("file", file);
@@ -87,18 +88,43 @@ export default function DirectUpload({ id, kind, label, token }: Props) {
           const ok = await waitUntilExists(postKey);
           if (!ok) throw new Error("Upload POST attempted but object not visible. Likely bucket CORS or signature mismatch.");
         } catch (postErr) {
-          // As a last resort for small files only, try server multipart (subject to Vercel ~4.5MB limit)
-          if (file.size > LARGE_THRESHOLD) {
-            throw new Error("Direct PUT/POST failed and file is too large for server fallback (>4MB). Please update Backblaze CORS to allow this origin or try from the main domain.");
+          console.warn("Presigned POST failed", postErr);
+          // Try B2 Native direct upload (b2_upload_file), which can avoid S3 CORS quirks
+          try {
+            const b2 = await fetch("/api/admin/templates/presign-b2", {
+              method: "POST",
+              credentials: "include",
+              headers: { "content-type": "application/json", ...(token ? { "x-admin-token": token } : {}) },
+              body: JSON.stringify({ templateId: id, kind }),
+            });
+            if (!b2.ok) throw new Error(`presign-b2 failed: ${await b2.text()}`);
+            const { uploadUrl, authToken, key: b2Key, corsInfo: b2Cors } = await b2.json();
+            if (b2Cors) console.log("presignB2.corsInfo", b2Cors);
+            const headers: Record<string, string> = {
+              Authorization: authToken,
+              "X-Bz-File-Name": encodeURI(b2Key),
+              "X-Bz-Content-Sha1": "do_not_verify",
+              "Content-Type": file.type || "b2/x-auto",
+            };
+            const up = await fetch(uploadUrl, { method: "POST", headers: headers as any, body: file as any });
+            if (!up.ok) throw new Error(`b2 upload failed: ${up.status}`);
+            const ok = await waitUntilExists(b2Key);
+            if (!ok) throw new Error("B2 native upload finished but object not visible.");
+          } catch (b2Err) {
+            console.warn("B2 native upload failed", b2Err);
+            // As a last resort for small files only, try server multipart (subject to Vercel ~4.5MB limit)
+            if (file.size > LARGE_THRESHOLD) {
+              throw new Error("Direct PUT/POST failed and file is too large for server fallback (>4MB). Please update Backblaze CORS to allow this origin or try from the main domain.");
+            }
+            const fd = new FormData();
+            fd.set("id", id);
+            fd.set("kind", kind);
+            fd.set("file", file);
+            const fb = await fetch("/api/admin/templates/direct-upload", { method: "POST", credentials: "include", headers: { ...(token ? { "x-admin-token": token } : {}) }, body: fd });
+            if (!fb.ok) throw new Error(`fallback upload failed: ${await fb.text()}`);
+            const ok = await waitUntilExists(key);
+            if (!ok) throw new Error("Server fallback finished but object not visible.");
           }
-          const fd = new FormData();
-          fd.set("id", id);
-          fd.set("kind", kind);
-          fd.set("file", file);
-          const fb = await fetch("/api/admin/templates/direct-upload", { method: "POST", credentials: "include", headers: { ...(token ? { "x-admin-token": token } : {}) }, body: fd });
-          if (!fb.ok) throw new Error(`fallback upload failed: ${await fb.text()}`);
-          const ok = await waitUntilExists(key);
-          if (!ok) throw new Error("Server fallback finished but object not visible.");
         }
       }
 
