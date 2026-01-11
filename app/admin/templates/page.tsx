@@ -622,7 +622,7 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
                 <td className="p-2">
                   {t.thumb_400_url || t.preview_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={t.thumb_400_url || t.preview_url} alt={t.title} className="w-24 h-16 object-cover rounded" />
+                    <img src={t.thumb_400_url || t.preview_url} alt={t.title} className="w-24 h-16 object-contain rounded bg-muted" />
                   ) : (
                     <div className="w-24 h-16 bg-muted rounded" />)
                   }

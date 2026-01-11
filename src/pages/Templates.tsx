@@ -114,7 +114,7 @@ export const Templates = () => {
                   <img
                     src={template.thumb_400_url || template.preview_url || ""}
                     alt={template.title}
-                    className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
+                    className="object-contain w-full h-full group-hover:scale-105 transition-transform duration-500"
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-primary/5 via-secondary to-accent/10 group-hover:scale-105 transition-transform duration-500" />
