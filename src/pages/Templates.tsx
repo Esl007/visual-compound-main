@@ -111,13 +111,21 @@ export const Templates = () => {
               {/* Preview */}
               <div className="aspect-[4/3] bg-muted relative overflow-hidden">
                 {template.thumb_400_url || template.preview_url ? (
-                  <img
-                    src={template.thumb_400_url || template.preview_url || ""}
-                    alt={template.title}
-                    className="object-contain w-full h-full group-hover:scale-105 transition-transform duration-500"
-                  />
+                  <>
+                    <div className="absolute inset-0">
+                      <div
+                        className="w-full h-full bg-cover bg-center blur-sm"
+                        style={{ backgroundImage: `url(${template.thumb_400_url || template.preview_url || ""})` }}
+                      />
+                    </div>
+                    <img
+                      src={template.thumb_400_url || template.preview_url || ""}
+                      alt={template.title}
+                      className="relative z-10 object-contain w-full h-full"
+                    />
+                  </>
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-primary/5 via-secondary to-accent/10 group-hover:scale-105 transition-transform duration-500" />
+                  <div className="w-full h-full bg-gradient-to-br from-primary/5 via-secondary to-accent/10" />
                 )}
                 
                 {/* Popular Badge */}

@@ -15,9 +15,9 @@ export async function generateAndUploadThumbnails(opts: {
   for (const size of sizes) {
     const width = size;
     const height = Math.round((size * 3) / 4); // 4:3 aspect to match UI display
-    // Create a blurred background fill to avoid empty side bars while keeping the main image uncropped
+    // Composite blurred cover background + contain foreground to avoid side gaps without zooming/cropping the subject
     const bg = await sharp(opts.input)
-      .resize(width, height, { fit: "cover", position: "centre" as any })
+      .resize(width, height, { fit: "cover" })
       .blur(24)
       .toBuffer();
     const fg = await sharp(opts.input)
