@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { uploadImage, cacheControlForKey, getSignedUrl } from "@/lib/storage/b2";
+import { uploadImage, cacheControlForKey, getSignedUrl, headObjectUrlIfExists } from "@/lib/storage/b2";
 import { buildAdminTemplateAssetPaths } from "@/lib/images/paths";
 import { generateAndUploadThumbnails, reencodeToPng } from "@/lib/images/thumbs";
 import sharp from "sharp";
@@ -26,11 +26,22 @@ export async function POST(req: NextRequest) {
 
     const paths = buildAdminTemplateAssetPaths(templateId);
 
+    async function waitForKey(key: string, ms = 8000) {
+      const deadline = Date.now() + ms;
+      while (Date.now() < deadline) {
+        const u = await headObjectUrlIfExists(bucket, key, 2000);
+        if (u) return u;
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      return null;
+    }
+
     if (kind === "background") {
-      // Fetch uploaded object and re-encode to PNG, then generate thumbnails and update DB
+      const probe = await waitForKey(paths.original, 8000);
+      if (!probe) return new Response(JSON.stringify({ pending: true, error: `Source not found (${paths.original})`, step: "precheck", bucket, key: paths.original }), { status: 202, headers: { "content-type": "application/json" } });
       const srcUrl = await getSignedUrl({ bucket, key: paths.original, expiresInSeconds: 180 });
       const r = await fetch(srcUrl);
-      if (!r.ok) return new Response(JSON.stringify({ error: `Source not found (${paths.original})` }), { status: 404 });
+      if (!r.ok) return new Response(JSON.stringify({ pending: true, error: `Source not found (${paths.original})`, step: "get", status: r.status }), { status: 202, headers: { "content-type": "application/json" } });
       const buf = Buffer.from(await r.arrayBuffer());
       const png = await reencodeToPng(buf);
       await uploadImage({ bucket, key: paths.original, body: png, contentType: "image/png", cacheControl: cacheControlForKey(paths.original) });
@@ -46,10 +57,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (kind === "product") {
-      // Compose uploaded product (currently at preview key) over background if available
+      const probe = await waitForKey(paths.preview, 8000);
+      if (!probe) return new Response(JSON.stringify({ pending: true, error: `Product source not found (${paths.preview})`, step: "precheck", bucket, key: paths.preview }), { status: 202, headers: { "content-type": "application/json" } });
       const prodUrl = await getSignedUrl({ bucket, key: paths.preview, expiresInSeconds: 180 });
       const pr = await fetch(prodUrl);
-      if (!pr.ok) return new Response(JSON.stringify({ error: `Product source not found (${paths.preview})` }), { status: 404 });
+      if (!pr.ok) return new Response(JSON.stringify({ pending: true, error: `Product source not found (${paths.preview})`, step: "get", status: pr.status }), { status: 202, headers: { "content-type": "application/json" } });
       const prodBuf = Buffer.from(await pr.arrayBuffer());
       const prodPng = await reencodeToPng(prodBuf);
 

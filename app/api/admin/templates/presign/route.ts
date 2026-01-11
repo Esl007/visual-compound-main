@@ -34,9 +34,10 @@ export async function POST(req: NextRequest) {
       "https://www.vizualyai.com",
       "http://localhost:3000",
     ].filter(Boolean) as string[];
-    try { await ensureBucketCors(bucket, knownOrigins.length ? knownOrigins : ["*"]); } catch {}
+    let corsInfo: any = null;
+    try { corsInfo = await ensureBucketCors(bucket, knownOrigins.length ? knownOrigins : ["*"]); } catch (e: any) { corsInfo = { error: e?.message || String(e) }; }
     const putUrl = await getSignedPutUrl({ bucket, key, contentType: String(mimeType || "application/octet-stream") });
-    return new Response(JSON.stringify({ putUrl, key }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ putUrl, key, corsInfo }), { status: 200, headers: { "content-type": "application/json" } });
   } catch (e: any) {
     return new Response(JSON.stringify({ error: e?.message || "Bad Request" }), { status: 400 });
   }

@@ -9,7 +9,7 @@ function truthy(v: any) {
 
 // Ensure B2 bucket has permissive CORS for browser-based presigned PUTs.
 // Allowed origins can be specific domains; default to '*'.
-export async function ensureBucketCors(bucket: string, allowedOrigins: string[] = ["*"]) {
+export async function ensureBucketCors(bucket: string, allowedOrigins: string[] = ["*"]): Promise<{ changed: boolean; effectiveOrigins: string[] }> {
   const client = b2Client();
   let existingOrigins: string[] = [];
   try {
@@ -28,7 +28,7 @@ export async function ensureBucketCors(bucket: string, allowedOrigins: string[] 
       const originOk = allowedOrigins.some((o) => origins.has(o.toLowerCase()) || origins.has("*"));
       return methodOk && originOk;
     });
-    if (hasRule) return;
+    if (hasRule) return { changed: false, effectiveOrigins: existingOrigins };
   } catch (_) {
     // Missing CORS config; proceed to set it.
   }
@@ -41,6 +41,7 @@ export async function ensureBucketCors(bucket: string, allowedOrigins: string[] 
     MaxAgeSeconds: 3000,
   };
   await client.send(new PutBucketCorsCommand({ Bucket: bucket, CORSConfiguration: { CORSRules: [rule] } }));
+  return { changed: true, effectiveOrigins: finalOrigins };
 }
 
 export function b2Client() {
