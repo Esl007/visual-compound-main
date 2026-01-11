@@ -169,3 +169,69 @@ export async function uploadImageWithVerify(
   // If we get here, upload succeeded but object not yet retrievable
   throw new Error(`Uploaded but not yet retrievable bucket=${params.bucket} key=${params.key}`);
 }
+
+// --- Backblaze B2 Native helpers (optional path for direct uploads without S3 presign) ---
+type B2Auth = { apiUrl: string; authorizationToken: string; downloadUrl: string; accountId: string };
+
+async function b2Authorize(): Promise<B2Auth> {
+  const keyId = process.env.S3_ACCESS_KEY_ID as string;
+  const appKey = process.env.S3_SECRET_ACCESS_KEY as string;
+  if (!keyId || !appKey) throw new Error("Missing B2 key id or application key");
+  const basic = Buffer.from(`${keyId}:${appKey}`).toString("base64");
+  const res = await fetch("https://api.backblazeb2.com/b2api/v2/b2_authorize_account", { headers: { Authorization: `Basic ${basic}` } as any });
+  if (!res.ok) throw new Error(`b2_authorize_account failed: ${res.status}`);
+  const j = (await res.json()) as any;
+  return { apiUrl: j.apiUrl, authorizationToken: j.authorizationToken, downloadUrl: j.downloadUrl, accountId: j.accountId };
+}
+
+async function b2GetBucketId(auth: B2Auth, bucketName: string): Promise<string> {
+  const url = `${auth.apiUrl}/b2api/v2/b2_list_buckets`;
+  const r = await fetch(url, { method: "POST", headers: { Authorization: auth.authorizationToken, "content-type": "application/json" } as any, body: JSON.stringify({ accountId: auth.accountId, bucketName }) });
+  if (!r.ok) throw new Error(`b2_list_buckets failed: ${r.status}`);
+  const j = (await r.json()) as any;
+  const b = (j.buckets || []).find((x: any) => x.bucketName === bucketName);
+  if (!b) throw new Error(`Bucket not found: ${bucketName}`);
+  return b.bucketId as string;
+}
+
+export async function getB2NativeUploadUrl(bucketName: string): Promise<{ uploadUrl: string; authToken: string }> {
+  const auth = await b2Authorize();
+  const bucketId = await b2GetBucketId(auth, bucketName);
+  const url = `${auth.apiUrl}/b2api/v2/b2_get_upload_url`;
+  const r = await fetch(url, { method: "POST", headers: { Authorization: auth.authorizationToken, "content-type": "application/json" } as any, body: JSON.stringify({ bucketId }) });
+  if (!r.ok) throw new Error(`b2_get_upload_url failed: ${r.status}`);
+  const j = (await r.json()) as any;
+  return { uploadUrl: j.uploadUrl as string, authToken: j.authorizationToken as string };
+}
+
+export async function ensureBucketCorsNative(bucketName: string, allowedOrigins: string[] = ["*"]) {
+  try {
+    const auth = await b2Authorize();
+    const bucketId = await b2GetBucketId(auth, bucketName);
+    const finalOrigins = Array.from(new Set(["*", ...allowedOrigins]));
+    const corsRules = [
+      {
+        corsRuleName: "public-wildcard",
+        allowedOrigins: finalOrigins,
+        allowedHeaders: ["*"],
+        allowedOperations: [
+          "b2_upload_file",
+          "b2_download_file_by_id",
+          "b2_download_file_by_name",
+          "s3_get",
+          "s3_put",
+          "s3_head",
+          "s3_post",
+        ],
+        exposeHeaders: ["ETag", "x-bz-file-id", "x-bz-file-name", "x-bz-content-sha1"],
+        maxAgeSeconds: 3000,
+      },
+    ];
+    const updateUrl = `${auth.apiUrl}/b2api/v2/b2_update_bucket`;
+    const r = await fetch(updateUrl, { method: "POST", headers: { Authorization: auth.authorizationToken, "content-type": "application/json" } as any, body: JSON.stringify({ bucketId, corsRules }) });
+    if (!r.ok) throw new Error(`b2_update_bucket failed: ${r.status}`);
+    return { changed: true, effectiveOrigins: finalOrigins };
+  } catch (e) {
+    return { changed: false, error: (e as any)?.message } as any;
+  }
+}

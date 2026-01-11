@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getSignedPutUrl, ensureBucketCors } from "@/lib/storage/b2";
+import { getSignedPutUrl, ensureBucketCors, ensureBucketCorsNative } from "@/lib/storage/b2";
 import { buildAdminTemplateAssetPaths } from "@/lib/images/paths";
 
 export const runtime = "nodejs";
@@ -35,9 +35,11 @@ export async function POST(req: NextRequest) {
       "http://localhost:3000",
     ].filter(Boolean) as string[];
     let corsInfo: any = null;
+    let corsNative: any = null;
     try { corsInfo = await ensureBucketCors(bucket, knownOrigins.length ? knownOrigins : ["*"]); } catch (e: any) { corsInfo = { error: e?.message || String(e) }; }
+    try { corsNative = await ensureBucketCorsNative(bucket, knownOrigins.length ? knownOrigins : ["*"]); } catch (e: any) { corsNative = { error: e?.message || String(e) }; }
     const putUrl = await getSignedPutUrl({ bucket, key, contentType: String(mimeType || "application/octet-stream") });
-    return new Response(JSON.stringify({ putUrl, key, corsInfo }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ putUrl, key, corsInfo: { s3: corsInfo, b2Native: corsNative } }), { status: 200, headers: { "content-type": "application/json" } });
   } catch (e: any) {
     return new Response(JSON.stringify({ error: e?.message || "Bad Request" }), { status: 400 });
   }

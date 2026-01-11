@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { getSignedUrl, ensureBucketCors } from "@/lib/storage/b2";
+import { getSignedUrl, ensureBucketCors, ensureBucketCorsNative } from "@/lib/storage/b2";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { uploadImageWithVerify, uploadImage, cacheControlForKey, deleteImage } from "@/lib/storage/b2";
@@ -419,6 +419,14 @@ export default async function Page({ searchParams }: { searchParams?: { [key: st
   if (bucketC) {
     try {
       await ensureBucketCors(bucketC, [
+        "*",
+        process.env.NEXT_PUBLIC_SITE_URL || "",
+        "https://visual-compound-main.vercel.app",
+        "https://vizualyai.com",
+        "https://www.vizualyai.com",
+        "http://localhost:3000",
+      ].filter(Boolean) as string[]);
+      await ensureBucketCorsNative(bucketC, [
         "*",
         process.env.NEXT_PUBLIC_SITE_URL || "",
         "https://visual-compound-main.vercel.app",

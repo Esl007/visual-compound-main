@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getPresignedPost, ensureBucketCors } from "@/lib/storage/b2";
+import { getPresignedPost, ensureBucketCors, ensureBucketCorsNative } from "@/lib/storage/b2";
 import { buildAdminTemplateAssetPaths } from "@/lib/images/paths";
 
 export const runtime = "nodejs";
@@ -33,10 +33,13 @@ export async function POST(req: NextRequest) {
       "https://www.vizualyai.com",
       "http://localhost:3000",
     ].filter(Boolean) as string[];
-    try { await ensureBucketCors(bucket, knownOrigins.length ? knownOrigins : ["*"]); } catch {}
+    let corsInfo: any = null;
+    let corsNative: any = null;
+    try { corsInfo = await ensureBucketCors(bucket, knownOrigins.length ? knownOrigins : ["*"]); } catch (e: any) { corsInfo = { error: e?.message || String(e) }; }
+    try { corsNative = await ensureBucketCorsNative(bucket, knownOrigins.length ? knownOrigins : ["*"]); } catch (e: any) { corsNative = { error: e?.message || String(e) }; }
 
     const { url, fields } = await getPresignedPost({ bucket, key, contentType: String(mimeType || "application/octet-stream"), maxSizeBytes: 1024 * 1024 * 100 });
-    return new Response(JSON.stringify({ url, fields, key }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ url, fields, key, corsInfo: { s3: corsInfo, b2Native: corsNative } }), { status: 200, headers: { "content-type": "application/json" } });
   } catch (e: any) {
     return new Response(JSON.stringify({ error: e?.message || "Bad Request" }), { status: 400 });
   }
