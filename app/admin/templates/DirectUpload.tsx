@@ -41,16 +41,33 @@ export default function DirectUpload({ id, kind, label, token }: Props) {
       } catch (err) {
         // CORS/network or provider error — fallback to server-side direct upload (multipart)
         console.warn("Presigned PUT failed", err);
-        if (file.size > LARGE_THRESHOLD) {
-          throw new Error("Direct PUT failed and file is too large for fallback route (>4MB). Please retry; CORS has been auto-configured. If this persists, reload and try again.");
+        // Try presigned POST which typically avoids preflight and can work with no-cors
+        try {
+          const postPresign = await fetch("/api/admin/templates/presign-post", {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json", ...(token ? { "x-admin-token": token } : {}) },
+            body: JSON.stringify({ templateId: id, kind, mimeType: file.type || "application/octet-stream" }),
+          });
+          if (!postPresign.ok) throw new Error(`presign-post failed: ${await postPresign.text()}`);
+          const { url: postUrl, fields } = await postPresign.json();
+          const fdDirect = new FormData();
+          Object.entries(fields || {}).forEach(([k, v]) => fdDirect.append(k, String(v)));
+          fdDirect.append("file", file);
+          // Use no-cors to avoid blocking on missing ACAO header; success will be inferred by processing step
+          await fetch(postUrl, { method: "POST", body: fdDirect, mode: "no-cors" as any });
+        } catch (postErr) {
+          // As a last resort for small files only, try server multipart (subject to Vercel ~4.5MB limit)
+          if (file.size > LARGE_THRESHOLD) {
+            throw new Error("Direct PUT/POST failed and file is too large for server fallback (>4MB). Please update Backblaze CORS to allow this origin or try from the main domain.");
+          }
+          const fd = new FormData();
+          fd.set("id", id);
+          fd.set("kind", kind);
+          fd.set("file", file);
+          const fb = await fetch("/api/admin/templates/direct-upload", { method: "POST", credentials: "include", headers: { ...(token ? { "x-admin-token": token } : {}) }, body: fd });
+          if (!fb.ok) throw new Error(`fallback upload failed: ${await fb.text()}`);
         }
-        // small files: ok to fallback
-        const fd = new FormData();
-        fd.set("id", id);
-        fd.set("kind", kind);
-        fd.set("file", file);
-        const fb = await fetch("/api/admin/templates/direct-upload", { method: "POST", credentials: "include", headers: { ...(token ? { "x-admin-token": token } : {}) }, body: fd });
-        if (!fb.ok) throw new Error(`fallback upload failed: ${await fb.text()}`);
       }
 
       // Always process after upload (either presigned PUT or fallback multipart)
