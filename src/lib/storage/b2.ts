@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, GetBucketCorsCommand, PutBucketCorsCommand, CORSRule } from "@aws-sdk/client-s3";
+import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { getSignedUrl as presign } from "@aws-sdk/s3-request-presigner";
 
 function truthy(v: any) {
@@ -102,6 +103,21 @@ export async function getSignedPutUrl(params: { bucket: string; key: string; con
   const cmd = new PutObjectCommand({ Bucket: params.bucket, Key: params.key, ContentType: params.contentType });
   const url = await presign(client, cmd, { expiresIn: params.expiresInSeconds ?? 600 });
   return url;
+}
+
+export async function getPresignedPost(params: { bucket: string; key: string; contentType?: string; expiresInSeconds?: number; maxSizeBytes?: number }) {
+  const client = b2Client();
+  const { url, fields } = await createPresignedPost(client, {
+    Bucket: params.bucket,
+    Key: params.key,
+    Expires: params.expiresInSeconds ?? 600,
+    Fields: params.contentType ? { "Content-Type": params.contentType } : undefined,
+    Conditions: [
+      ["eq", "$key", params.key],
+      ["content-length-range", 1, params.maxSizeBytes ?? 104857600], // up to 100MB default
+    ],
+  });
+  return { url, fields };
 }
 
 export function cacheControlForKey(key: string) {
