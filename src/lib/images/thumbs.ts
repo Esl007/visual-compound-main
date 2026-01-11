@@ -13,17 +13,10 @@ export async function generateAndUploadThumbnails(opts: {
   const sizes = [400, 600];
   const out: { size: number; path: string }[] = [];
   for (const size of sizes) {
-    const width = size;
-    const height = Math.round((size * 3) / 4); // 4:3 aspect to match UI display
-    // Composite blurred cover background + contain foreground to avoid side gaps without zooming/cropping the subject
-    const bg = await sharp(opts.input)
-      .resize(width, height, { fit: "cover" })
-      .blur(24)
+    const webp = await sharp(opts.input)
+      .resize(size, size, { fit: "cover", position: "centre" as any })
+      .webp({ quality: 82 })
       .toBuffer();
-    const fg = await sharp(opts.input)
-      .resize(width, height, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } as any })
-      .toBuffer();
-    const webp = await sharp(bg).composite([{ input: fg }]).webp({ quality: 82 }).toBuffer();
     const path = `${opts.outputBasePath}/thumb_${size}.webp`;
     await uploadImage({
       bucket: opts.bucket,
