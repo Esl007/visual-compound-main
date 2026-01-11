@@ -216,15 +216,15 @@ export async function ensureBucketCorsNative(bucketName: string, allowedOrigins:
   try {
     const auth = await b2Authorize();
     const bucketId = await b2GetBucketId(auth, bucketName);
-    const finalOrigins = Array.from(new Set(["*", ...allowedOrigins]));
+    const base = (allowedOrigins || []).map((o) => String(o).trim()).filter(Boolean);
+    const finalOrigins = base.includes("*") ? ["*"] : Array.from(new Set(base));
     const corsRules = [
       {
         corsRuleName: "public-wildcard",
         allowedOrigins: finalOrigins,
         allowedHeaders: [
-          "*",
-          "Authorization",
-          "Content-Type",
+          "authorization",
+          "content-type",
           "x-amz-*",
           "x-amz-meta-*",
           "x-amz-sdk-checksum-algorithm",
@@ -244,7 +244,7 @@ export async function ensureBucketCorsNative(bucketName: string, allowedOrigins:
       },
     ];
     const updateUrl = `${auth.apiUrl}/b2api/v2/b2_update_bucket`;
-    const r = await fetch(updateUrl, { method: "POST", headers: { Authorization: auth.authorizationToken, "content-type": "application/json" } as any, body: JSON.stringify({ bucketId, corsRules }) });
+    const r = await fetch(updateUrl, { method: "POST", headers: { Authorization: auth.authorizationToken, "content-type": "application/json" } as any, body: JSON.stringify({ accountId: auth.accountId, bucketId, corsRules }) });
     if (!r.ok) throw new Error(`b2_update_bucket failed: ${r.status}`);
     return { changed: true, effectiveOrigins: finalOrigins };
   } catch (e) {
