@@ -139,7 +139,6 @@ export const Generate = () => {
   };
 
   const handleFileSelected = async (file?: File) => {
-    if (!isAuthed) return;
     if (!file) return;
     setUploading(true);
     try {
@@ -151,14 +150,32 @@ export const Generate = () => {
         fr.readAsDataURL(file);
       });
       setUploadedImageDataUrl(dataUrl);
-      let presign = await requestPresign(file, { bucket: "AI-Image-Gen-3", prefix: "uploads" });
-      let put = await fetch(presign.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
-      if (!put.ok) {
-        presign = await requestPresign(file);
-        put = await fetch(presign.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
-        if (!put.ok) throw new Error("Upload failed");
+      let uploadedUrl: string | null = null;
+      try {
+        let presign = await requestPresign(file, { bucket: "AI-Image-Gen-3", prefix: "uploads" });
+        let put = await fetch(presign.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
+        if (!put.ok) {
+          presign = await requestPresign(file);
+          put = await fetch(presign.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
+        }
+        if (put.ok) {
+          uploadedUrl = presign.fileUrl;
+        } else {
+          throw new Error("presigned_put_failed");
+        }
+      } catch (_) {
+        // Fallback: server-side upload using data URL (bypasses browser CORS)
+        const r = await fetch("/api/storage/save-dataurl", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ dataUrl, bucket: "AI-Image-Gen-3", prefix: "uploads", contentType: file.type }),
+        });
+        if (!r.ok) throw new Error("upload_fallback_failed");
+        const j = await r.json();
+        uploadedUrl = j?.fileUrl || null;
       }
-      setUploadedImageUrl(presign.fileUrl);
+      if (!uploadedUrl) throw new Error("upload_no_url");
+      setUploadedImageUrl(uploadedUrl);
       // Try to record in assets as a 'product' image (ignore failure if not authenticated)
       try {
         const imgDims = await (async () => {
@@ -172,18 +189,18 @@ export const Generate = () => {
         await fetch("/api/assets", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ url: presign.fileUrl, type: "product", width: imgDims.width, height: imgDims.height }),
+          body: JSON.stringify({ url: uploadedUrl, type: "product", width: imgDims.width, height: imgDims.height }),
         });
       } catch {}
     } catch (e) {
       console.error(e);
+      setApiError("Image upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
   };
 
   const handleManualSave = async () => {
-    if (!isAuthed) return;
     if (!generatedImage) return;
     setIsSaving(true);
     setApiError(null);
@@ -251,7 +268,6 @@ export const Generate = () => {
   };
 
   const handleGenerate = async () => {
-    if (!isAuthed) return;
     setIsGenerating(true);
     setApiError(null);
     setDebugInfo(null);

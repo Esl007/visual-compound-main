@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 export const runtime = "nodejs";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { ensureBucketCors } from "@/lib/storage/b2";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 function cleanEnv(v?: string) {
@@ -46,6 +47,12 @@ export async function POST(req: NextRequest) {
       endpoint,
       forcePathStyle,
     });
+
+    // Best-effort: ensure bucket CORS allows current origin for PUT/GET/HEAD
+    try {
+      const origin = req.headers.get("origin") || "*";
+      await ensureBucketCors(bucket, [origin, "*"]);
+    } catch {}
 
     // Generate key
     const safePrefix = (prefix || "uploads").replace(/(^\/+|\/+?$)/g, "");

@@ -42,9 +42,7 @@ export async function POST(req: NextRequest) {
   try {
     const supa = supabaseServer();
     const { data: { session } } = await supa.auth.getSession();
-    if (!session) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-    }
+    const hasSession = Boolean(session);
     const body = await req.json();
     const prompt: string | undefined = body?.prompt;
     const productImageUrl: string | undefined = body?.productImageUrl;
@@ -52,7 +50,7 @@ export async function POST(req: NextRequest) {
     const keepBackground: boolean | undefined = body?.keepBackground;
     const aspectRatio: string | undefined = body?.aspectRatio;
     const imageSize: "1K" | "2K" | "4K" | undefined = body?.imageSize;
-    const persist: boolean = Boolean(body?.persist);
+    let persist: boolean = Boolean(body?.persist) && hasSession;
     const templateId: string | undefined = body?.templateId;
     const numImages: number = (() => {
       const n = Number(body?.numImages);
@@ -368,11 +366,12 @@ const combinedPrompt = (() => {
       }
     };
     const hasGuidance = Boolean(inlineDataUrl || productImageUrl);
-    const userId = session.user.id;
+    const userId = session?.user?.id || null;
     const bucket = process.env.S3_BUCKET as string;
     async function persistImages(images: Array<{ imageBase64: string; mimeType: string }>) {
       if (!images || images.length === 0) return null;
       if (!persist) return null;
+      if (!userId) return null;
       const stored: Array<{ id: string; storage_path: string; signed_url: string; mimeType: string }> = [];
       for (const im of images) {
         const mime = im.mimeType || "image/png";
