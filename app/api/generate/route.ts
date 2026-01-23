@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
     const prompt: string | undefined = body?.prompt;
     const productImageUrl: string | undefined = body?.productImageUrl;
     const productImageDataUrl: string | undefined = body?.productImageDataUrl;
+    const productImageKey: string | undefined = body?.productImageKey;
     const keepBackground: boolean | undefined = body?.keepBackground;
     const aspectRatio: string | undefined = body?.aspectRatio;
     const imageSize: "1K" | "2K" | "4K" | undefined = body?.imageSize;
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
     if (!GOOGLE_API_KEY) {
       return new Response(JSON.stringify({ error: "Missing GOOGLE_API_KEY" }), { status: 500 });
     }
-    if (!prompt && !productImageUrl && !productImageDataUrl && !templateId) {
+    if (!prompt && !productImageUrl && !productImageDataUrl && !productImageKey && !templateId) {
       return new Response(JSON.stringify({ error: "Provide prompt or product image" }), { status: 400 });
     }
     const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
@@ -87,7 +88,23 @@ if (templateId) {
   } catch {}
 }
 
-const inlineDataUrl = templateImageDataUrl || productImageDataUrl || null;
+let inlineDataUrl: string | null = templateImageDataUrl || null;
+if (!inlineDataUrl && productImageDataUrl) {
+  inlineDataUrl = productImageDataUrl;
+}
+if (!inlineDataUrl && productImageKey) {
+  try {
+    const bucketK = process.env.S3_BUCKET as string;
+    // Short-lived signed URL so we can fetch private object
+    const signed = await getSignedUrl({ bucket: bucketK, key: productImageKey, expiresInSeconds: 60 });
+    const refRes = await fetchWithTimeout(signed, { method: "GET", cache: "no-store", timeoutMs: 20000 } as any);
+    if (refRes.ok) {
+      const mime = refRes.headers.get("content-type") || "image/png";
+      const buf = Buffer.from(await refRes.arrayBuffer());
+      inlineDataUrl = `data:${mime};base64,${buf.toString("base64")}`;
+    }
+  } catch {}
+}
 const keepBg = templateId ? true : Boolean(keepBackground);
 const combinedPrompt = (() => {
   const parts: string[] = [];

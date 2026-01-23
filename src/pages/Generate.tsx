@@ -38,6 +38,7 @@ export const Generate = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const [uploadedImageDataUrl, setUploadedImageDataUrl] = useState<string | null>(null);
+  const [uploadedImageKey, setUploadedImageKey] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [keepBackground, setKeepBackground] = useState(true);
   const [sceneDescription, setSceneDescription] = useState("");
@@ -57,7 +58,6 @@ export const Generate = () => {
         if (!mounted) return;
         if (!data?.user) {
           setIsAuthed(false);
-          router.push("/sign-in");
         } else {
           setIsAuthed(true);
           // Ensure server session cookies are set for API routes
@@ -77,7 +77,6 @@ export const Generate = () => {
       } catch {
         if (!mounted) return;
         setIsAuthed(false);
-        router.push("/sign-in");
       }
     })();
     return () => {
@@ -135,7 +134,7 @@ export const Generate = () => {
       body: JSON.stringify({ contentType: file.type, fileName: file.name, bucket: opts?.bucket, prefix: opts?.prefix }),
     });
     if (!res.ok) throw new Error("Failed to get upload URL");
-    return (await res.json()) as { uploadUrl: string; fileUrl: string };
+    return (await res.json()) as { uploadUrl: string; fileUrl: string; key: string };
   };
 
   const handleFileSelected = async (file?: File) => {
@@ -160,6 +159,7 @@ export const Generate = () => {
         }
         if (put.ok) {
           uploadedUrl = presign.fileUrl;
+          setUploadedImageKey(presign.key || null);
         } else {
           throw new Error("presigned_put_failed");
         }
@@ -173,6 +173,7 @@ export const Generate = () => {
         if (!r.ok) throw new Error("upload_fallback_failed");
         const j = await r.json();
         uploadedUrl = j?.fileUrl || null;
+        if (j?.key) setUploadedImageKey(j.key);
       }
       if (!uploadedUrl) throw new Error("upload_no_url");
       setUploadedImageUrl(uploadedUrl);
@@ -314,7 +315,8 @@ export const Generate = () => {
         body: JSON.stringify({
           prompt: activeTab === "prompt" ? prompt : sceneDescription || prompt,
           productImageUrl: activeTab === "product" ? uploadedImageUrl : undefined,
-          productImageDataUrl: activeTab === "product" ? uploadedImageDataUrl : undefined,
+          productImageDataUrl: activeTab === "product" && !uploadedImageKey ? uploadedImageDataUrl : undefined,
+          productImageKey: activeTab === "product" ? uploadedImageKey : undefined,
           keepBackground: templateId ? true : keepBackground,
           aspectRatio,
           numImages,
@@ -517,9 +519,14 @@ export const Generate = () => {
                       {uploadedImageUrl || uploadedImageDataUrl ? (
                         <div className="relative w-full h-56 md:h-64">
                           <img
-                            src={uploadedImageUrl || uploadedImageDataUrl || ""}
+                            src={uploadedImageDataUrl || uploadedImageUrl || ""}
                             alt="Uploaded"
                             className="object-contain w-full h-full bg-muted"
+                            onError={(e) => {
+                              if (uploadedImageDataUrl) {
+                                (e.currentTarget as HTMLImageElement).src = uploadedImageDataUrl;
+                              }
+                            }}
                           />
                         </div>
                       ) : (
