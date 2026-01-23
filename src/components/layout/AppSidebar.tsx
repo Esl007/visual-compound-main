@@ -17,7 +17,8 @@ import {
   Menu,
   Home,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 
 interface NavItem {
   label: string;
@@ -49,6 +50,37 @@ const footerNav: NavItem[] = [
 export const AppSidebar = () => {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const supa = supabaseBrowser();
+    (async () => {
+      try {
+        const { data } = await supa.auth.getUser();
+        if (!mounted) return;
+        setUserEmail(data.user?.email || null);
+        const name = (data.user?.user_metadata as any)?.name || (data.user?.user_metadata as any)?.full_name || null;
+        setUserName(name);
+      } catch {}
+    })();
+    const { data: sub } = supa.auth.onAuthStateChange(async () => {
+      try {
+        const { data } = await supa.auth.getUser();
+        setUserEmail(data.user?.email || null);
+        const name = (data.user?.user_metadata as any)?.name || (data.user?.user_metadata as any)?.full_name || null;
+        setUserName(name);
+      } catch {
+        setUserEmail(null);
+        setUserName(null);
+      }
+    });
+    return () => {
+      mounted = false;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
 
   const NavLink = ({ item }: { item: NavItem }) => {
     const isActive = pathname === item.path || (item.path === "/" && pathname === "/");
@@ -126,20 +158,52 @@ export const AppSidebar = () => {
         ))}
       </nav>
 
-      {/* Footer Navigation */}
-      <div className="p-3 border-t border-sidebar-border space-y-1">
-        {footerNav.map((item) => {
-          const isSignIn = item.path === "/sign-in";
-          const safePath = pathname || "/";
-          const nextAware: NavItem = isSignIn
-            ? { ...item, path: `/sign-in?next=${encodeURIComponent(safePath)}` }
-            : item;
-          return (
-            <div key={item.path}>
-              <NavLink item={nextAware} />
+      <div className="p-3 border-t border-sidebar-border space-y-2">
+        {userEmail ? (
+          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="h-7 w-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-semibold">
+                {(userName || userEmail).slice(0, 1).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-medium truncate">{userName || "Signed in"}</div>
+                <div className="text-[11px] text-muted-foreground truncate">{userEmail}</div>
+              </div>
             </div>
-          );
-        })}
+            <button
+              onClick={async () => {
+                try {
+                  await supabaseBrowser().auth.signOut();
+                } finally {
+                  const next = encodeURIComponent(pathname || "/");
+                  window.location.href = `/sign-in?next=${next}`;
+                }
+              }}
+              className="text-xs px-2 py-1 rounded-md bg-muted hover:bg-muted/70"
+            >
+              Sign out
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {footerNav.map((item) => {
+              if (item.path === "/sign-in") {
+                const safePath = pathname || "/";
+                const nextAware: NavItem = { ...item, path: `/sign-in?next=${encodeURIComponent(safePath)}` };
+                return (
+                  <div key={item.path}>
+                    <NavLink item={nextAware} />
+                  </div>
+                );
+              }
+              return (
+                <div key={item.path}>
+                  <NavLink item={item} />
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </motion.aside>
   );

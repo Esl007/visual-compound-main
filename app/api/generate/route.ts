@@ -63,8 +63,8 @@ export async function POST(req: NextRequest) {
     if (!GOOGLE_API_KEY) {
       return new Response(JSON.stringify({ error: "Missing GOOGLE_API_KEY" }), { status: 500 });
     }
-    if (!prompt && !productImageUrl && !templateId) {
-      return new Response(JSON.stringify({ error: "Provide prompt or productImageUrl" }), { status: 400 });
+    if (!prompt && !productImageUrl && !productImageDataUrl && !templateId) {
+      return new Response(JSON.stringify({ error: "Provide prompt or product image" }), { status: 400 });
     }
     const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
     let templateImageDataUrl: string | null = null;

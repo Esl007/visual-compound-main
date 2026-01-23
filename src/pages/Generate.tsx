@@ -60,6 +60,19 @@ export const Generate = () => {
           router.push("/sign-in");
         } else {
           setIsAuthed(true);
+          // Ensure server session cookies are set for API routes
+          try {
+            const { data: sess } = await supabaseBrowser().auth.getSession();
+            const at = sess.session?.access_token;
+            const rt = sess.session?.refresh_token;
+            if (at && rt) {
+              await fetch("/auth/set-session", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ access_token: at, refresh_token: rt }),
+              });
+            }
+          } catch {}
         }
       } catch {
         if (!mounted) return;
