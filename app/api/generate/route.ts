@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
     const imageSize: "1K" | "2K" | "4K" | undefined = body?.imageSize;
     let persist: boolean = Boolean(body?.persist) && hasSession;
     const templateId: string | undefined = body?.templateId;
+    const templateMode = Boolean(templateId);
     const numImages: number = (() => {
       const n = Number(body?.numImages);
       if (!Number.isFinite(n)) return 1;
@@ -72,12 +73,13 @@ if (templateId) {
   try {
     const { data: trow } = await supa
       .from("templates")
-      .select("background_image_path, background_prompt, product_prompt")
+      .select("original_image_path, background_image_path, background_prompt, product_prompt")
       .eq("id", templateId)
       .single();
-    if (trow?.background_image_path) {
+    const origKey: string | null = (trow as any)?.original_image_path || (trow as any)?.background_image_path || null;
+    if (origKey) {
       const bucketT = process.env.S3_BUCKET as string;
-      const signedBg = await getSignedUrl({ bucket: bucketT, key: trow.background_image_path, expiresInSeconds: 300 });
+      const signedBg = await getSignedUrl({ bucket: bucketT, key: origKey, expiresInSeconds: 300 });
       const resBg = await fetch(signedBg);
       if (resBg.ok) {
         const buf = Buffer.from(await resBg.arrayBuffer());
@@ -89,13 +91,12 @@ if (templateId) {
 }
 
 let inlineDataUrl: string | null = templateImageDataUrl || null;
-if (!inlineDataUrl && productImageDataUrl) {
+if (!inlineDataUrl && !templateMode && productImageDataUrl) {
   inlineDataUrl = productImageDataUrl;
 }
-if (!inlineDataUrl && productImageKey) {
+if (!inlineDataUrl && !templateMode && productImageKey) {
   try {
     const bucketK = process.env.S3_BUCKET as string;
-    // Short-lived signed URL so we can fetch private object
     const signed = await getSignedUrl({ bucket: bucketK, key: productImageKey, expiresInSeconds: 60 });
     const refRes = await fetchWithTimeout(signed, { method: "GET", cache: "no-store", timeoutMs: 20000 } as any);
     if (refRes.ok) {
@@ -106,6 +107,7 @@ if (!inlineDataUrl && productImageKey) {
   } catch {}
 }
 const keepBg = templateId ? true : Boolean(keepBackground);
+ templateId ? true : Boolean(keepBackground);
 const combinedPrompt = (() => {
   const parts: string[] = [];
   if (templateProductPrompt && String(templateProductPrompt).trim()) parts.push(String(templateProductPrompt).trim());
@@ -118,8 +120,8 @@ const combinedPrompt = (() => {
     const tryGenerate = async (modelName: string) => {
       const model = genAI.getGenerativeModel({ model: modelName });
       let imgPart: any = null;
-      if (inlineDataUrl || productImageUrl) {
-        const source = inlineDataUrl || productImageUrl!;
+      if (inlineDataUrl || (!templateMode && productImageUrl)) {
+        const source = inlineDataUrl || (productImageUrl as string);
         if (source.startsWith("data:")) {
           const idx = source.indexOf(",");
           const meta = source.slice(5, idx);
@@ -182,8 +184,8 @@ const combinedPrompt = (() => {
     };
     const tryGenerateRest = async () => {
       let imgPart: any = null;
-      if (inlineDataUrl || productImageUrl) {
-        const source = inlineDataUrl || productImageUrl!;
+      if (inlineDataUrl || (!templateMode && productImageUrl)) {
+        const source = inlineDataUrl || (productImageUrl as string);
         if (source.startsWith("data:")) {
           const idx = source.indexOf(",");
           const meta = source.slice(5, idx);
@@ -382,7 +384,7 @@ const combinedPrompt = (() => {
         return await withRetry(() => attempt("models/gemini-2.5-flash-image"), 4);
       }
     };
-    const hasGuidance = Boolean(inlineDataUrl || productImageUrl);
+    const hasGuidance = Boolean(inlineDataUrl || (!templateMode && productImageUrl));const hasGuidance = Boolean(inlineDataUrl || productImageUrl); productImageUrl));
     const userId = session?.user?.id || null;
     const bucket = process.env.S3_BUCKET as string;
     async function persistImages(images: Array<{ imageBase64: string; mimeType: string }>) {
