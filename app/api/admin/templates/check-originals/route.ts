@@ -34,13 +34,22 @@ export async function GET(req: NextRequest) {
     if (!bucket) return new Response(JSON.stringify({ error: "Missing S3_BUCKET" }), { status: 500 });
 
     const supa = supabaseAdmin();
-    const { data, error } = await supa
+    // Try selecting with original_image_path; if the column doesn't exist in this DB, fall back to a reduced selection
+    let rows: any[] = [];
+    const r1 = await supa
       .from("templates")
       .select("id, original_image_path, background_image_path, thumbnail_400_path, thumbnail_600_path")
       .limit(200);
-    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
-
-    const rows = Array.isArray(data) ? data : [];
+    if ((r1 as any)?.error) {
+      const r2 = await supa
+        .from("templates")
+        .select("id, background_image_path, thumbnail_400_path, thumbnail_600_path")
+        .limit(200);
+      if ((r2 as any)?.error) return new Response(JSON.stringify({ error: (r2 as any).error.message }), { status: 400 });
+      rows = (r2 as any)?.data || [];
+    } else {
+      rows = (r1 as any)?.data || [];
+    }
     const items = [] as Array<{
       id: string;
       original: { exists: boolean; size: number | null; key: string };
