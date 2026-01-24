@@ -72,11 +72,28 @@ let templateProductPrompt: string | null = null;
 let templateDebug: any = null;
 if (templateId) {
   try {
-    const { data: trow } = await supa
+    let trow: any = null;
+    const r1 = await supa
       .from("templates")
       .select("original_image_path, background_image_path, background_prompt, product_prompt")
       .eq("id", templateId)
       .single();
+    if ((r1 as any)?.error) {
+      const r2 = await supa
+        .from("templates")
+        .select("background_image_path, background_prompt, product_prompt")
+        .eq("id", templateId)
+        .single();
+      if (!(r2 as any)?.error) trow = (r2 as any).data || null;
+      if (typeof templateDebug === 'object' && templateDebug) {
+        templateDebug.selectFallback = true;
+        templateDebug.selectError = (r1 as any).error?.message || String((r1 as any).error || 'select_error');
+      } else {
+        templateDebug = { selectFallback: true, selectError: (r1 as any).error?.message || String((r1 as any).error || 'select_error') };
+      }
+    } else {
+      trow = (r1 as any).data || null;
+    }
     const origKey: string | null = (trow as any)?.original_image_path || (trow as any)?.background_image_path || null;
     if (origKey) {
       const bucketT = process.env.S3_BUCKET as string;
