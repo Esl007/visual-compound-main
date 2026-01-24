@@ -314,9 +314,9 @@ export const Generate = () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           prompt: activeTab === "prompt" ? prompt : sceneDescription || prompt,
-          productImageUrl: activeTab === "product" ? uploadedImageUrl : undefined,
-          productImageDataUrl: activeTab === "product" && !uploadedImageKey ? uploadedImageDataUrl : undefined,
-          productImageKey: activeTab === "product" ? uploadedImageKey : undefined,
+          productImageUrl: activeTab === "product" && !templateId ? uploadedImageUrl : undefined,
+          productImageDataUrl: activeTab === "product" && !templateId && !uploadedImageKey ? uploadedImageDataUrl : undefined,
+          productImageKey: activeTab === "product" && !templateId ? uploadedImageKey : undefined,
           keepBackground: templateId ? true : keepBackground,
           aspectRatio,
           numImages,

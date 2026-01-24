@@ -92,13 +92,8 @@ export async function GET(req: NextRequest) {
         };
         if (row.preview_image_path) {
           out.preview_url = await getSignedUrl({ bucket, key: row.preview_image_path, expiresInSeconds: 300 });
-        } else if (row.background_image_path) {
-          out.preview_url = await getSignedUrl({ bucket, key: row.background_image_path, expiresInSeconds: 300 });
         } else {
-          const base = `templates/${row.id}`;
-          const p = await headIfExists(`${base}/preview.png`);
-          const o = p ? null : await headIfExists(`${base}/original.png`);
-          out.preview_url = p || o || null;
+          out.preview_url = null;
         }
         if (row.thumbnail_400_path) {
           out.thumb_400_url = await getSignedUrl({ bucket, key: row.thumbnail_400_path, expiresInSeconds: 300 });
@@ -112,6 +107,7 @@ export async function GET(req: NextRequest) {
           const t600 = await headIfExists(`templates/${row.id}/thumb_600.webp`);
           if (t600) out.thumb_600_url = t600;
         }
+        out.thumbnail_url = out.thumb_400_url || out.thumb_600_url || null;
         return out;
       })
     );

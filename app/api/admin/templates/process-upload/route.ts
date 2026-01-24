@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
       const t600 = thumbs.find((t) => t.size === 600)?.path || null;
       const { error } = await supa
         .from("templates")
-        .update({ background_image_path: paths.original, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() })
+        .update({ original_image_path: paths.original, background_image_path: paths.original, thumbnail_400_path: t400, thumbnail_600_path: t600, updated_at: new Date().toISOString() })
         .eq("id", templateId);
       if (error) throw error;
       return new Response(JSON.stringify({ ok: true, templateId, background_image_path: paths.original, thumbnail_400_path: t400, thumbnail_600_path: t600 }), { status: 200, headers: { "content-type": "application/json" } });

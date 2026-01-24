@@ -11,6 +11,7 @@ interface TemplateItem {
   preview_url?: string;
   thumb_400_url?: string;
   thumb_600_url?: string;
+  thumbnail_url?: string;
 }
 
 const container = {
@@ -108,11 +109,11 @@ export const Templates = () => {
                 selectedTemplate === template.id ? "ring-2 ring-primary" : ""
               }`}
             >
-              {/* Preview */}
+              {/* Preview (thumbnails only) */}
               <div className="aspect-[4/3] bg-muted relative overflow-hidden">
-                {template.preview_url || template.thumb_400_url || template.thumb_600_url ? (
+                {template.thumbnail_url || template.thumb_600_url || template.thumb_400_url ? (
                   <img
-                    src={template.preview_url || template.thumb_600_url || template.thumb_400_url || ""}
+                    src={template.thumbnail_url || template.thumb_600_url || template.thumb_400_url || ""}
                     alt={template.title}
                     className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
                   />
