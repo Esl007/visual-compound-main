@@ -107,7 +107,6 @@ if (!inlineDataUrl && !templateMode && productImageKey) {
   } catch {}
 }
 const keepBg = templateId ? true : Boolean(keepBackground);
- templateId ? true : Boolean(keepBackground);
 const combinedPrompt = (() => {
   const parts: string[] = [];
   if (templateProductPrompt && String(templateProductPrompt).trim()) parts.push(String(templateProductPrompt).trim());
@@ -115,7 +114,6 @@ const combinedPrompt = (() => {
   return parts.join(" ");
 })();
 
-;
     // Try primary Imagen 3 model name
     const tryGenerate = async (modelName: string) => {
       const model = genAI.getGenerativeModel({ model: modelName });
@@ -384,7 +382,7 @@ const combinedPrompt = (() => {
         return await withRetry(() => attempt("models/gemini-2.5-flash-image"), 4);
       }
     };
-    const hasGuidance = Boolean(inlineDataUrl || (!templateMode && productImageUrl));const hasGuidance = Boolean(inlineDataUrl || productImageUrl); productImageUrl));
+    const hasGuidance = Boolean(inlineDataUrl || (!templateMode && productImageUrl));
     const userId = session?.user?.id || null;
     const bucket = process.env.S3_BUCKET as string;
     async function persistImages(images: Array<{ imageBase64: string; mimeType: string }>) {
