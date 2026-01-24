@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
     const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
     let templateImageDataUrl: string | null = null;
 let templateProductPrompt: string | null = null;
+let templateDebug: any = null;
 if (templateId) {
   try {
     const { data: trow } = await supa
@@ -80,11 +81,15 @@ if (templateId) {
     if (origKey) {
       const bucketT = process.env.S3_BUCKET as string;
       const signedBg = await getSignedUrl({ bucket: bucketT, key: origKey, expiresInSeconds: 300 });
-      const resBg = await fetch(signedBg);
+      const resBg = await fetchWithTimeout(signedBg, { method: "GET", cache: "no-store", timeoutMs: 20000 } as any);
       if (resBg.ok) {
-        const buf = Buffer.from(await resBg.arrayBuffer());
-        templateImageDataUrl = `data:image/png;base64,${buf.toString("base64")}`;
-      }
+  const mime = resBg.headers.get("content-type") || "image/png";
+  const buf = Buffer.from(await resBg.arrayBuffer());
+  templateImageDataUrl = `data:${mime};base64,${buf.toString("base64")}`;
+  templateDebug = { origKey, mime };
+} else {
+  templateDebug = { origKey, errorStatus: resBg.status };
+}
     }
     if (trow?.product_prompt) templateProductPrompt = String(trow.product_prompt);
   } catch {}
@@ -435,6 +440,7 @@ while (agg.length < target && guard < 6) {
 }
 if (dbg) {
           dbg.response = { ...(dbg.response || {}), imagesCount: agg.length };
+        if (templateDebug) { dbg = { ...(dbg || {}), template: templateDebug }; }
         }
         const stored = persist ? await persistImages(agg) : null;
           const payload: any = {
@@ -550,6 +556,7 @@ while (agg.length < target && guard < 6) {
   guard++;
 }
 if (dbg) dbg.response = { ...(dbg.response || {}), imagesCount: agg.length };
+        if (templateDebug) { dbg = { ...(dbg || {}), template: templateDebug }; }
           const payload: any = {
             images: agg,
             imageBase64: agg[0]?.imageBase64,
