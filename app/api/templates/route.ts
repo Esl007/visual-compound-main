@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { resolveTemplateCdnUrl } from "@/lib/storage/templateCdn";
+import { getSignedUrl } from "@/lib/storage/b2";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,21 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") || 50)));
     const from = Math.max(0, Number(searchParams.get("from") || 0));
     const byId = String(searchParams.get("id") || "").trim() || null;
+
+    async function probeCdn(url: string, timeoutMs: number = 1500): Promise<boolean> {
+      try {
+        const ac = new AbortController();
+        const t = setTimeout(() => ac.abort(), timeoutMs);
+        try {
+          const r = await fetch(url, { method: "GET", headers: { Range: "bytes=0-0" }, cache: "no-store", signal: ac.signal } as any);
+          return r.ok || r.status === 206;
+        } finally {
+          clearTimeout(t);
+        }
+      } catch {
+        return false;
+      }
+    }
 
     async function loadTemplates() {
       try {
@@ -61,6 +77,7 @@ export async function GET(req: NextRequest) {
     }
 
     const data = await loadTemplates();
+    const bucket = process.env.S3_BUCKET as string | undefined;
 
     const items = await Promise.all(
       (data || []).map(async (row: any) => {
@@ -72,32 +89,58 @@ export async function GET(req: NextRequest) {
           featured: row.featured,
           created_at: row.created_at,
         };
-        // Map to CDN for allowed template assets only
-        try {
-          if (row.preview_image_path) {
-            out.preview_url = resolveTemplateCdnUrl(row.preview_image_path);
-          } else {
-            // conservative fallback to standard admin templates path
-            out.preview_url = resolveTemplateCdnUrl(`users/admin-templates/${row.id}/preview.png`);
+        // preview
+        {
+          const key = row.preview_image_path || `users/admin-templates/${row.id}/preview.png`;
+          let url: string | null = null;
+          try {
+            const cdn = resolveTemplateCdnUrl(key);
+            if (await probeCdn(cdn)) {
+              url = cdn;
+            }
+          } catch {}
+          if (!url && bucket) {
+            try {
+              url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 });
+            } catch {}
           }
-        } catch {
-          out.preview_url = null;
+          out.preview_url = url || null;
         }
-        try {
-          if (row.thumbnail_400_path) {
-            out.thumb_400_url = resolveTemplateCdnUrl(row.thumbnail_400_path);
-          } else {
-            out.thumb_400_url = resolveTemplateCdnUrl(`users/admin-templates/${row.id}/thumb_400.webp`);
+        // thumb_400
+        {
+          const key = row.thumbnail_400_path || `users/admin-templates/${row.id}/thumb_400.webp`;
+          let url: string | null = null;
+          try {
+            const cdn = resolveTemplateCdnUrl(key);
+            if (await probeCdn(cdn)) {
+              url = cdn;
+            }
+          } catch {}
+          if (!url && bucket) {
+            try {
+              url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 });
+            } catch {}
           }
-        } catch {}
-        try {
-          if (row.thumbnail_600_path) {
-            out.thumb_600_url = resolveTemplateCdnUrl(row.thumbnail_600_path);
-          } else {
-            out.thumb_600_url = resolveTemplateCdnUrl(`users/admin-templates/${row.id}/thumb_600.webp`);
+          out.thumb_400_url = url || null;
+        }
+        // thumb_600
+        {
+          const key = row.thumbnail_600_path || `users/admin-templates/${row.id}/thumb_600.webp`;
+          let url: string | null = null;
+          try {
+            const cdn = resolveTemplateCdnUrl(key);
+            if (await probeCdn(cdn)) {
+              url = cdn;
+            }
+          } catch {}
+          if (!url && bucket) {
+            try {
+              url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 });
+            } catch {}
           }
-        } catch {}
-        out.thumbnail_url = out.thumb_400_url || out.thumb_600_url || null;
+          out.thumb_600_url = url || null;
+        }
+        out.thumbnail_url = out.thumb_400_url || out.thumb_600_url || out.preview_url || null;
         return out;
       })
     );

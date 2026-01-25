@@ -43,12 +43,16 @@ export async function POST(req: NextRequest) {
       .select("original_image_path, background_image_path, product_prompt")
       .eq("id", templateId)
       .single();
-    // Guard: only allow original.png for template AI source
-    const origOnly = (trow as any)?.original_image_path || null;
-    if (!origOnly || !String(origOnly).endsWith("original.png")) {
-      return new Response(JSON.stringify({ error: "Invalid AI image source" }), { status: 400 });
+    let origKey: string | null = null;
+    const o = (trow as any)?.original_image_path || null;
+    if (o && String(o).endsWith("original.png")) {
+      origKey = o;
+    } else {
+      const b = (trow as any)?.background_image_path || null;
+      if (b && !/(thumb_|preview)/.test(String(b))) {
+        origKey = b;
+      }
     }
-    const origKey: string | null = (trow as any)?.original_image_path || (trow as any)?.background_image_path || null;
     if (!origKey) {
       return new Response(JSON.stringify({ error: "Template has no original image" }), { status: 404 });
     }

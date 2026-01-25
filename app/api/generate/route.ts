@@ -94,12 +94,19 @@ if (templateId) {
     } else {
       trow = (r1 as any).data || null;
     }
-    // Guard: only allow original.png for template AI source
-    const origOnly = (trow as any)?.original_image_path || null;
-    if (!origOnly || !String(origOnly).endsWith("original.png")) {
+    let origKey: string | null = null;
+    const o = (trow as any)?.original_image_path || null;
+    if (o && String(o).endsWith("original.png")) {
+      origKey = o;
+    } else {
+      const b = (trow as any)?.background_image_path || null;
+      if (b && !/(thumb_|preview)/.test(String(b))) {
+        origKey = b;
+      }
+    }
+    if (!origKey) {
       throw new Error("Invalid AI image source");
     }
-    const origKey: string | null = (trow as any)?.original_image_path || (trow as any)?.background_image_path || null;
     if (origKey) {
       const bucketT = process.env.S3_BUCKET as string;
       const signedBg = await getSignedUrl({ bucket: bucketT, key: origKey, expiresInSeconds: 300 });
