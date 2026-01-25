@@ -94,6 +94,11 @@ if (templateId) {
     } else {
       trow = (r1 as any).data || null;
     }
+    // Guard: only allow original.png for template AI source
+    const origOnly = (trow as any)?.original_image_path || null;
+    if (!origOnly || !String(origOnly).endsWith("original.png")) {
+      throw new Error("Invalid AI image source");
+    }
     const origKey: string | null = (trow as any)?.original_image_path || (trow as any)?.background_image_path || null;
     if (origKey) {
       const bucketT = process.env.S3_BUCKET as string;

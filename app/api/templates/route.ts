@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { getSignedUrl } from "@/lib/storage/b2";
+import { resolveTemplateCdnUrl } from "@/lib/storage/templateCdn";
 
 export const runtime = "nodejs";
 
@@ -62,24 +62,6 @@ export async function GET(req: NextRequest) {
 
     const data = await loadTemplates();
 
-    const bucket = process.env.S3_BUCKET as string;
-    if (!bucket) return new Response(JSON.stringify({ error: "Missing S3_BUCKET" }), { status: 500 });
-
-    async function headIfExists(key: string) {
-      try {
-        const url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 });
-        const ac = new AbortController();
-        const t = setTimeout(() => ac.abort(), 2500);
-        try {
-          const r = await fetch(url, { method: "HEAD", signal: ac.signal } as any);
-          if (r.ok) return url;
-        } finally {
-          clearTimeout(t);
-        }
-      } catch {}
-      return null;
-    }
-
     const items = await Promise.all(
       (data || []).map(async (row: any) => {
         const out: any = {
@@ -90,23 +72,31 @@ export async function GET(req: NextRequest) {
           featured: row.featured,
           created_at: row.created_at,
         };
-        if (row.preview_image_path) {
-          out.preview_url = await getSignedUrl({ bucket, key: row.preview_image_path, expiresInSeconds: 300 });
-        } else {
+        // Map to CDN for allowed template assets only
+        try {
+          if (row.preview_image_path) {
+            out.preview_url = resolveTemplateCdnUrl(row.preview_image_path);
+          } else {
+            // conservative fallback to standard admin templates path
+            out.preview_url = resolveTemplateCdnUrl(`users/admin-templates/${row.id}/preview.png`);
+          }
+        } catch {
           out.preview_url = null;
         }
-        if (row.thumbnail_400_path) {
-          out.thumb_400_url = await getSignedUrl({ bucket, key: row.thumbnail_400_path, expiresInSeconds: 300 });
-        } else {
-          const t400 = await headIfExists(`templates/${row.id}/thumb_400.webp`);
-          if (t400) out.thumb_400_url = t400;
-        }
-        if (row.thumbnail_600_path) {
-          out.thumb_600_url = await getSignedUrl({ bucket, key: row.thumbnail_600_path, expiresInSeconds: 300 });
-        } else {
-          const t600 = await headIfExists(`templates/${row.id}/thumb_600.webp`);
-          if (t600) out.thumb_600_url = t600;
-        }
+        try {
+          if (row.thumbnail_400_path) {
+            out.thumb_400_url = resolveTemplateCdnUrl(row.thumbnail_400_path);
+          } else {
+            out.thumb_400_url = resolveTemplateCdnUrl(`users/admin-templates/${row.id}/thumb_400.webp`);
+          }
+        } catch {}
+        try {
+          if (row.thumbnail_600_path) {
+            out.thumb_600_url = resolveTemplateCdnUrl(row.thumbnail_600_path);
+          } else {
+            out.thumb_600_url = resolveTemplateCdnUrl(`users/admin-templates/${row.id}/thumb_600.webp`);
+          }
+        } catch {}
         out.thumbnail_url = out.thumb_400_url || out.thumb_600_url || null;
         return out;
       })
