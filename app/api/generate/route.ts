@@ -197,6 +197,9 @@ const combinedPrompt = (() => {
       }
       const arSet = new Set(["1:1", "16:9", "9:16"]);
       const ar = arSet.has(aspectRatio || "") ? (aspectRatio as string) : "1:1";
+      const imageCfgSdk: any = selectedModel === "gemini-3-pro-image-preview"
+        ? { aspectRatio: ar, imageSize: validatedSize }
+        : { aspectRatio: ar };
       const result = await model.generateContent({
         contents: [
           {
@@ -211,7 +214,7 @@ const combinedPrompt = (() => {
         ],
         generationConfig: {
           responseModalities: ["TEXT", "IMAGE"],
-          imageConfig: { aspectRatio: ar, imageSize: validatedSize },
+          imageConfig: imageCfgSdk,
         } as any,
       });
       const candidates = (result as any)?.response?.candidates || [];
@@ -276,6 +279,14 @@ const combinedPrompt = (() => {
         response: {},
       };
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent`;
+      const imageCfgRest: any = selectedModel === "gemini-3-pro-image-preview"
+        ? { aspectRatio: ar, imageSize: validatedSize }
+        : { aspectRatio: ar };
+      // Convert inline image part to REST shape (snake_case)
+      const restParts = [
+        { text: promptText },
+        ...(imgPart ? [{ inline_data: { mime_type: imgPart.inlineData.mimeType, data: imgPart.inlineData.data } }] : []),
+      ];
       const res = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
@@ -283,21 +294,16 @@ const combinedPrompt = (() => {
           "x-goog-api-key": GOOGLE_API_KEY,
         },
         body: JSON.stringify({
-          model: selectedModel,
           contents: [
             {
               role: "user",
-              parts: [
-                { text: promptText },
-                ...(imgPart ? [imgPart] : []),
-              ],
+              parts: restParts,
             },
           ],
           generationConfig: {
             responseModalities: ["TEXT", "IMAGE"],
-            imageConfig: { aspectRatio: ar, imageSize: validatedSize },
+            imageConfig: imageCfgRest,
           },
-          aspect: ar,
         }),
       } as any);
       if (!res.ok) {
@@ -365,7 +371,12 @@ const combinedPrompt = (() => {
             model: modelId,
             // Common shapes used across Google samples; include both for compatibility
             prompt: { text: promptText },
-            imageGenerationConfig: { aspectRatio: ar, numberOfImages: numImages, outputMimeType: "image/png", imageSize: validatedSize },
+            imageGenerationConfig: {
+              aspectRatio: ar,
+              numberOfImages: numImages,
+              outputMimeType: "image/png",
+              ...(selectedModel === "gemini-3-pro-image-preview" ? { imageSize: validatedSize } : {}),
+            },
             aspect: ar,
           }),
         } as any);
