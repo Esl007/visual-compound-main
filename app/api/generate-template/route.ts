@@ -18,6 +18,11 @@ async function fetchWithTimeout(url: string, opts: RequestInit & { timeoutMs?: n
 
 export async function POST(req: NextRequest) {
   try {
+    const supa = supabaseServer();
+    const { data: { user } } = await supa.auth.getUser();
+    if (!user) {
+      return new Response(JSON.stringify({ error: "Authentication required" }), { status: 401 });
+    }
     const body = await req.json();
     const templateId: string | undefined = body?.templateId;
     const userPrompt: string | undefined = body?.prompt;
@@ -37,7 +42,6 @@ export async function POST(req: NextRequest) {
       return new Response(JSON.stringify({ error: "Missing GOOGLE_API_KEY" }), { status: 500 });
     }
 
-    const supa = supabaseServer();
     const { data: trow } = await supa
       .from("templates")
       .select("original_image_path, background_image_path, product_prompt")
