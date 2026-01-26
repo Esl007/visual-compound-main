@@ -89,54 +89,60 @@ export async function GET(req: NextRequest) {
           featured: row.featured,
           created_at: row.created_at,
         };
-        // preview
+        // preview (with legacy path fallback)
         {
-          const key = row.preview_image_path || `users/admin-templates/${row.id}/preview.png`;
+          const candidates = [
+            row.preview_image_path,
+            `users/admin-templates/${row.id}/preview.png`,
+            `templates/${row.id}/preview.png`,
+          ].filter(Boolean) as string[];
           let url: string | null = null;
-          try {
-            const cdn = resolveTemplateCdnUrl(key);
-            if (await probeCdn(cdn)) {
-              url = cdn;
-            }
-          } catch {}
-          if (!url && bucket) {
+          for (const key of candidates) {
             try {
-              url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 });
+              const cdn = resolveTemplateCdnUrl(key);
+              if (await probeCdn(cdn)) { url = cdn; break; }
             } catch {}
+            if (!url && bucket) {
+              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 }); break; } catch {}
+            }
           }
           out.preview_url = url || null;
         }
-        // thumb_400
+        // thumb_400 (with legacy path fallback)
         {
-          const key = row.thumbnail_400_path || `users/admin-templates/${row.id}/thumb_400.webp`;
+          const candidates = [
+            row.thumbnail_400_path,
+            `users/admin-templates/${row.id}/thumb_400.webp`,
+            `templates/${row.id}/thumb_400.webp`,
+          ].filter(Boolean) as string[];
           let url: string | null = null;
-          try {
-            const cdn = resolveTemplateCdnUrl(key);
-            if (await probeCdn(cdn)) {
-              url = cdn;
-            }
-          } catch {}
-          if (!url && bucket) {
+          for (const key of candidates) {
             try {
-              url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 });
+              const cdn = resolveTemplateCdnUrl(key);
+              if (await probeCdn(cdn)) { url = cdn; break; }
             } catch {}
+            if (!url && bucket) {
+              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 }); break; } catch {}
+            }
           }
           out.thumb_400_url = url || null;
         }
-        // thumb_600
+        // thumb_600 (with legacy path fallback)
         {
-          const key = row.thumbnail_600_path || `users/admin-templates/${row.id}/thumb_600.webp`;
+          const candidates = [
+            row.thumbnail_600_path,
+            `users/admin-templates/${row.id}/thumb_600.webp`,
+            `templates/${row.id}/thumb_600.webp`,
+          ].filter(Boolean) as string[];
           let url: string | null = null;
-          try {
-            const cdn = resolveTemplateCdnUrl(key);
-            if (await probeCdn(cdn)) {
-              url = cdn;
-            }
-          } catch {}
-          if (!url && bucket) {
+          for (const key of candidates) {
             try {
-              url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 });
+              const cdn = resolveTemplateCdnUrl(key);
+              if (await probeCdn(cdn)) { url = cdn; break; }
             } catch {}
+            if (!url && bucket) {
+              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 }); break; } catch {}
+            }
           }
           out.thumb_600_url = url || null;
         }

@@ -152,8 +152,8 @@
   }
 
   .btn-primary {
-    @apply bg-primary text-primary-foreground font-medium rounded-lg px-6 py-3 transition-all duration-200;
-    @apply hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/20;
+    @apply bg-black text-white font-medium rounded-lg px-6 py-3 transition-all duration-200;
+    @apply hover:bg-[#111111];
     @apply active:scale-[0.98];
   }
 
@@ -171,7 +171,7 @@
 
   .input-field {
     @apply w-full bg-background border border-border rounded-lg px-4 py-3 transition-all duration-200;
-    @apply focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary;
+    @apply focus:outline-none focus:ring-2 focus:ring-black/30 focus:border-black;
   }
 
   .input-field::placeholder {
@@ -199,37 +199,37 @@
 
   /* Themed slider styling */
   .range-theme {
-    accent-color: hsl(var(--primary));
-    --range-shdw: hsl(var(--primary));
+    accent-color: #000000;
+    --range-shdw: #000000;
   }
   input.range.range-theme::-webkit-slider-thumb {
-    background-color: hsl(var(--primary));
-    border: 2px solid hsl(var(--primary));
+    background-color: #000000;
+    border: 2px solid #000000;
     box-shadow: none;
   }
   input.range.range-theme::-moz-range-thumb {
-    background-color: hsl(var(--primary));
-    border: 2px solid hsl(var(--primary));
+    background-color: #000000;
+    border: 2px solid #000000;
   }
   input.range.range-theme::-webkit-slider-runnable-track {
-    background-color: hsl(var(--primary) / 0.18);
+    background-color: rgb(0 0 0 / 0.18);
   }
   input.range.range-theme::-moz-range-track {
-    background-color: hsl(var(--primary) / 0.18);
+    background-color: rgb(0 0 0 / 0.18);
   }
   input.range.range-theme {
     --min: 1;
     --max: 6;
     --val: 1;
-    --range-track: hsl(var(--primary) / 0.18);
-    --range-fill: hsl(var(--primary) / 0.60);
+    --range-track: rgb(0 0 0 / 0.18);
+    --range-fill: rgb(0 0 0 / 0.60);
     --p: calc((var(--val) - var(--min)) / (var(--max) - var(--min)) * 100%);
     background: linear-gradient(var(--range-fill) 0 0) 0/var(--p) 100% no-repeat, var(--range-track);
   }
   input.range.range-theme:focus::-webkit-slider-thumb,
   input.range.range-theme:active::-webkit-slider-thumb {
-    background-color: hsl(var(--primary));
-    border-color: hsl(var(--primary));
+    background-color: #000000;
+    border-color: #000000;
   }
 }
 

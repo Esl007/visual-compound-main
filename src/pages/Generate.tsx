@@ -44,6 +44,8 @@ export const Generate = () => {
   const [sceneDescription, setSceneDescription] = useState("");
   const [aspectRatio, setAspectRatio] = useState<"1:1" | "16:9" | "9:16">("1:1");
   const [numImages, setNumImages] = useState<number>(1);
+  const [model, setModel] = useState<"fast" | "pro">("fast");
+  const [imageSize, setImageSize] = useState<"1K" | "2K" | "4K">("1K");
   const [apiError, setApiError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<any | null>(null);
   const outputRef = useRef<HTMLDivElement | null>(null);
@@ -308,6 +310,13 @@ export const Generate = () => {
         }
       }
 
+      // Auth check UI-side (server remains authoritative)
+      if (isAuthed === false) {
+        router.push("/sign-in");
+        setIsGenerating(false);
+        return;
+      }
+
       // Generate image via API
       const genRes = await fetch("/api/generate", {
         method: "POST",
@@ -322,6 +331,8 @@ export const Generate = () => {
           numImages,
           persist: true,
           templateId: templateId || undefined,
+          model: model === "pro" ? "pro" : "fast",
+          imageSize,
         }),
       });
       if (!genRes.ok) {
@@ -472,7 +483,7 @@ export const Generate = () => {
                     onClick={() => setEnhancePrompt(!enhancePrompt)}
                   >
                     <div className="flex items-center gap-3">
-                      <Wand2 className="w-5 h-5 text-primary" />
+                      <Wand2 className="w-5 h-5 text-black" />
                       <div>
                         <p className="text-sm font-medium text-foreground">Enhance prompt with AI</p>
                         <p className="text-xs text-muted-foreground">Let AI refine your description</p>
@@ -480,7 +491,7 @@ export const Generate = () => {
                     </div>
                     <div
                       className={`w-11 h-6 rounded-full transition-colors duration-200 relative ${
-                        enhancePrompt ? "bg-primary" : "bg-border"
+                        enhancePrompt ? "bg-black" : "bg-border"
                       }`}
                     >
                       <div
@@ -514,7 +525,7 @@ export const Generate = () => {
                         const f = e.dataTransfer.files?.[0];
                         if (f) void handleFileSelected(f);
                       }}
-                      className="border-2 border-dashed border-border rounded-xl p-0 text-center hover:border-primary/50 transition-colors cursor-pointer group overflow-hidden"
+                      className="border-2 border-dashed border-border rounded-xl p-0 text-center hover:border-black/50 transition-colors cursor-pointer group overflow-hidden"
                     >
                       {uploadedImageUrl || uploadedImageDataUrl ? (
                         <div className="relative w-full h-56 md:h-64">
@@ -531,8 +542,8 @@ export const Generate = () => {
                         </div>
                       ) : (
                         <div className="p-8">
-                          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                            <Upload className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
+                          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center group-hover:bg-black/10 transition-colors">
+                            <Upload className="w-8 h-8 text-muted-foreground group-hover:text-black transition-colors" />
                           </div>
                           <p className="text-foreground font-medium mb-1">
                             {uploading ? "Uploading..." : "Drop your image here"}
@@ -570,7 +581,7 @@ export const Generate = () => {
                     onClick={() => setKeepBackground(!keepBackground)}
                   >
                     <div className="flex items-center gap-3">
-                      <Layers className="w-5 h-5 text-primary" />
+                      <Layers className="w-5 h-5 text-black" />
                       <div>
                         <p className="text-sm font-medium text-foreground">Keep background consistent</p>
                         <p className="text-xs text-muted-foreground">Maintain visual consistency</p>
@@ -578,7 +589,7 @@ export const Generate = () => {
                     </div>
                     <div
                       className={`w-11 h-6 rounded-full transition-colors duration-200 relative ${
-                        keepBackground ? "bg-primary" : "bg-border"
+                        keepBackground ? "bg-black" : "bg-border"
                       }`}
                     >
                       <div
@@ -592,6 +603,62 @@ export const Generate = () => {
               )}
             </AnimatePresence>
 
+            {/* Model Selector */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-foreground">Model</label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setModel("fast"); setImageSize((s) => (s === "1K" ? s : "1K")); }}
+                  className={`px-3 py-2 rounded-md text-sm border transition-colors ${
+                    model === "fast" ? "bg-black text-white border-black" : "border-border hover:bg-muted"
+                  }`}
+                >
+                  Nano Banana (Fast)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModel("pro")}
+                  className={`px-3 py-2 rounded-md text-sm border transition-colors ${
+                    model === "pro" ? "bg-black text-white border-black" : "border-border hover:bg-muted"
+                  }`}
+                >
+                  Nano Banana Pro (HQ)
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {model === "pro" ? "High quality, slower." : "Fast and cost-effective."}
+              </p>
+            </div>
+
+            {/* Resolution Selector */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-foreground">Resolution</label>
+              <div className="flex items-center gap-2">
+                {([
+                  { label: "HD", val: "1K" },
+                  { label: "2K", val: "2K" },
+                  { label: "4K", val: "4K" },
+                ] as const).map((opt) => {
+                  const enabled = model === "pro" || opt.val === "1K";
+                  const selected = imageSize === opt.val;
+                  return (
+                    <button
+                      key={opt.val}
+                      type="button"
+                      onClick={() => enabled && setImageSize(opt.val)}
+                      disabled={!enabled}
+                      className={`px-3 py-2 rounded-md text-sm border transition-colors ${
+                        selected ? "bg-black text-white border-black" : "border-border hover:bg-muted"
+                      } ${!enabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Aspect Ratio */}
             <div className="space-y-3">
               <label className="text-sm font-medium text-foreground">Aspect ratio</label>
@@ -602,7 +669,7 @@ export const Generate = () => {
                     type="button"
                     onClick={() => setAspectRatio(ar)}
                     className={`px-3 py-2 rounded-md text-sm border transition-colors ${
-                      aspectRatio === ar ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"
+                      aspectRatio === ar ? "bg-black text-white border-black" : "border-border hover:bg-muted"
                     }`}
                   >
                     {ar}
@@ -643,7 +710,7 @@ export const Generate = () => {
             {/* Generate Button */}
             <button
               onClick={handleGenerate}
-              disabled={isGenerating}
+              disabled={isGenerating || isAuthed === false}
               className="w-full btn-primary flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {isGenerating ? (
@@ -708,8 +775,8 @@ export const Generate = () => {
                             />
                           ) : (
                             <div className="text-center p-8">
-                              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-primary/20 flex items-center justify-center">
-                                <Check className="w-10 h-10 text-primary" />
+                              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-black/10 flex items-center justify-center">
+                                <Check className="w-10 h-10 text-black" />
                               </div>
                               <p className="text-foreground font-medium">Image Generated!</p>
                               <p className="text-sm text-muted-foreground">Your visual is ready</p>

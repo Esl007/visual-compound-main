@@ -41,8 +41,11 @@ async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 4) {
 export async function POST(req: NextRequest) {
   try {
     const supa = supabaseServer();
-    const { data: { session } } = await supa.auth.getSession();
-    const hasSession = Boolean(session);
+    const { data: { user } } = await supa.auth.getUser();
+    if (!user) {
+      return new Response(JSON.stringify({ error: "Authentication required" }), { status: 401 });
+    }
+    const hasSession = true;
     const body = await req.json();
     const prompt: string | undefined = body?.prompt;
     const productImageUrl: string | undefined = body?.productImageUrl;
@@ -50,7 +53,18 @@ export async function POST(req: NextRequest) {
     const productImageKey: string | undefined = body?.productImageKey;
     const keepBackground: boolean | undefined = body?.keepBackground;
     const aspectRatio: string | undefined = body?.aspectRatio;
-    const imageSize: "1K" | "2K" | "4K" | undefined = body?.imageSize;
+    const reqImageSize: "1K" | "2K" | "4K" | undefined = body?.imageSize;
+    const modelInput: string = String(body?.model || "fast");
+    const selectedModel: "gemini-2.5-flash-image" | "gemini-3-pro-image-preview" =
+      modelInput === "pro" ? "gemini-3-pro-image-preview" : "gemini-2.5-flash-image";
+    const validatedSize: "1K" | "2K" | "4K" = (() => {
+      if (selectedModel === "gemini-2.5-flash-image") return "1K";
+      if (reqImageSize && ["1K", "2K", "4K"].includes(reqImageSize)) return reqImageSize;
+      return "1K";
+    })();
+    if (selectedModel === "gemini-3-pro-image-preview" && reqImageSize && !["1K", "2K", "4K"].includes(reqImageSize)) {
+      return new Response(JSON.stringify({ error: "Invalid resolution for selected model" }), { status: 400 });
+    }
     let persist: boolean = Boolean(body?.persist) && hasSession;
     const templateId: string | undefined = body?.templateId;
     const templateMode = Boolean(templateId);
@@ -148,7 +162,7 @@ const combinedPrompt = (() => {
   return parts.join(" ");
 })();
 
-    // Try primary Imagen 3 model name
+    // Try primary model name
     const tryGenerate = async (modelName: string) => {
       const model = genAI.getGenerativeModel({ model: modelName });
       let imgPart: any = null;
@@ -196,7 +210,8 @@ const combinedPrompt = (() => {
           },
         ],
         generationConfig: {
-          imageConfig: { aspectRatio: ar }
+          responseModalities: ["TEXT", "IMAGE"],
+          imageConfig: { aspectRatio: ar, imageSize: validatedSize },
         } as any,
       });
       const candidates = (result as any)?.response?.candidates || [];
@@ -251,7 +266,7 @@ const combinedPrompt = (() => {
       const debug: any = {
         endpoint: "generateContent:REST",
         request: {
-          model: "gemini-2.5-flash-image",
+          model: selectedModel,
           aspect: ar,
           promptPreview: (promptText || "").slice(0, 200),
           promptLength: (promptText || "").length,
@@ -260,7 +275,7 @@ const combinedPrompt = (() => {
         },
         response: {},
       };
-      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent`;
       const res = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
@@ -268,7 +283,7 @@ const combinedPrompt = (() => {
           "x-goog-api-key": GOOGLE_API_KEY,
         },
         body: JSON.stringify({
-          model: "gemini-2.5-flash-image",
+          model: selectedModel,
           contents: [
             {
               role: "user",
@@ -279,7 +294,8 @@ const combinedPrompt = (() => {
             },
           ],
           generationConfig: {
-            imageConfig: { aspectRatio: ar },
+            responseModalities: ["TEXT", "IMAGE"],
+            imageConfig: { aspectRatio: ar, imageSize: validatedSize },
           },
           aspect: ar,
         }),
@@ -349,7 +365,7 @@ const combinedPrompt = (() => {
             model: modelId,
             // Common shapes used across Google samples; include both for compatibility
             prompt: { text: promptText },
-            imageGenerationConfig: { aspectRatio: ar, numberOfImages: numImages, outputMimeType: "image/png" },
+            imageGenerationConfig: { aspectRatio: ar, numberOfImages: numImages, outputMimeType: "image/png", imageSize: validatedSize },
             aspect: ar,
           }),
         } as any);
@@ -411,13 +427,13 @@ const combinedPrompt = (() => {
       };
       // Try both forms of model identifier for compatibility
       try {
-        return await withRetry(() => attempt("gemini-2.5-flash-image"), 4);
+        return await withRetry(() => attempt(selectedModel), 4);
       } catch (_) {
-        return await withRetry(() => attempt("models/gemini-2.5-flash-image"), 4);
+        return await withRetry(() => attempt(`models/${selectedModel}`), 4);
       }
     };
     const hasGuidance = Boolean(inlineDataUrl || (!templateMode && productImageUrl));
-    const userId = session?.user?.id || null;
+    const userId = user?.id || null;
     const bucket = process.env.S3_BUCKET as string;
     async function persistImages(images: Array<{ imageBase64: string; mimeType: string }>) {
       if (!images || images.length === 0) return null;
@@ -502,7 +518,7 @@ if (dbg) {
             const target = numImages;
             const agg: Array<{ imageBase64: string; mimeType: string }> = [];
             for (let i = 0; i < target; i++) {
-              const outCore = (await tryGenerate("gemini-2.5-flash-image")) as any;
+              const outCore = (await tryGenerate(selectedModel)) as any;
               const imgs: Array<{ imageBase64: string; mimeType: string }> = Array.isArray(outCore?.images)
                 ? outCore.images
                 : outCore?.imageBase64
@@ -520,7 +536,7 @@ if (dbg) {
               debug: {
                 endpoint: "sdk-generateContent",
                 request: {
-                  model: "gemini-2.5-flash-image",
+                  model: selectedModel,
                   aspect: ar,
                   promptPreview: (promptText || "").slice(0, 200),
                   promptLength: (promptText || "").length,
