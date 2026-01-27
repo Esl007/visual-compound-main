@@ -3,6 +3,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { getTemplateImageUrl } from "@/lib/storage/templateCdnClient";
 import {
   Sparkles,
   ImagePlus,
@@ -107,7 +108,7 @@ export const Generate = () => {
         if (aborted) return;
         // Prefer thumb/preview; API already falls back to background when preview missing
         const url: string | null = item.thumb_600_url || item.thumb_400_url || item.preview_url || null;
-        if (url) setUploadedImageUrl(url);
+        if (url) setUploadedImageUrl(getTemplateImageUrl(url));
         // Pre-seed scene description with template's product prompt
         if (typeof item.product_prompt === "string" && item.product_prompt.trim()) {
           setSceneDescription(item.product_prompt);

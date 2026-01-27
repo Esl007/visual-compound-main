@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { getTemplateImageUrl } from "@/lib/storage/templateCdnClient";
 import { LayoutTemplate, Star, Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -113,7 +114,7 @@ export const Templates = () => {
               <div className="aspect-[4/3] bg-muted relative overflow-hidden">
                 {template.thumbnail_url || template.thumb_600_url || template.thumb_400_url ? (
                   <img
-                    src={template.thumbnail_url || template.thumb_600_url || template.thumb_400_url || ""}
+                    src={getTemplateImageUrl(template.thumbnail_url || template.thumb_600_url || template.thumb_400_url || "")}
                     alt={template.title}
                     className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
                   />

@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
               if (await probeCdn(cdn)) { url = cdn; break; }
             } catch {}
             if (!url && bucket) {
-              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 }); break; } catch {}
+              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 2592000 }); break; } catch {}
             }
           }
           out.preview_url = url || null;
@@ -122,7 +122,7 @@ export async function GET(req: NextRequest) {
               if (await probeCdn(cdn)) { url = cdn; break; }
             } catch {}
             if (!url && bucket) {
-              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 }); break; } catch {}
+              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 2592000 }); break; } catch {}
             }
           }
           out.thumb_400_url = url || null;
@@ -141,7 +141,7 @@ export async function GET(req: NextRequest) {
               if (await probeCdn(cdn)) { url = cdn; break; }
             } catch {}
             if (!url && bucket) {
-              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 300 }); break; } catch {}
+              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 2592000 }); break; } catch {}
             }
           }
           out.thumb_600_url = url || null;
