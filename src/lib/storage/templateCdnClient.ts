@@ -6,7 +6,7 @@ const TEMPLATE_PREFIX = "/users/admin-templates/";
 
 export function getTemplateImageUrl(originalUrl: string): string {
   try {
-    const baseRaw = (process.env.B2_CDN_BASE || "").trim();
+    const baseRaw = (process.env.NEXT_PUBLIC_B2_CDN_BASE || process.env.B2_CDN_BASE || (process as any).env?.b2_cdn_base || (process as any).env?.NEXT_PUBLIC_b2_cdn_base || "").trim();
     if (!baseRaw) return originalUrl;
 
     const at = originalUrl.indexOf(TEMPLATE_PREFIX);

@@ -19,21 +19,6 @@ export async function GET(req: NextRequest) {
     const from = Math.max(0, Number(searchParams.get("from") || 0));
     const byId = String(searchParams.get("id") || "").trim() || null;
 
-    async function probeCdn(url: string, timeoutMs: number = 1500): Promise<boolean> {
-      try {
-        const ac = new AbortController();
-        const t = setTimeout(() => ac.abort(), timeoutMs);
-        try {
-          const r = await fetch(url, { method: "GET", headers: { Range: "bytes=0-0" }, cache: "no-store", signal: ac.signal } as any);
-          return r.ok || r.status === 206;
-        } finally {
-          clearTimeout(t);
-        }
-      } catch {
-        return false;
-      }
-    }
-
     async function loadTemplates() {
       try {
         let q = (supa as any)
@@ -89,63 +74,76 @@ export async function GET(req: NextRequest) {
           featured: row.featured,
           created_at: row.created_at,
         };
-        // preview (with legacy path fallback)
+
+        // preview (with legacy path fallback) — prefer CDN stable URL; fallback to long-lived signed URL only if needed
         {
           const candidates = [
-            row.preview_image_path,
             `users/admin-templates/${row.id}/preview.png`,
+            row.preview_image_path,
             `templates/${row.id}/preview.png`,
           ].filter(Boolean) as string[];
           let url: string | null = null;
           for (const key of candidates) {
             try {
               const cdn = resolveTemplateCdnUrl(key);
-              if (await probeCdn(cdn)) { url = cdn; break; }
+              url = cdn; break;
             } catch {}
-            if (!url && bucket) {
-              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 2592000 }); break; } catch {}
+          }
+          if (!url && bucket) {
+            const key = candidates.find(Boolean) as string | undefined;
+            if (key) {
+              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 2592000 }); } catch {}
             }
           }
           out.preview_url = url || null;
         }
+
         // thumb_400 (with legacy path fallback)
         {
           const candidates = [
-            row.thumbnail_400_path,
             `users/admin-templates/${row.id}/thumb_400.webp`,
+            row.thumbnail_400_path,
             `templates/${row.id}/thumb_400.webp`,
           ].filter(Boolean) as string[];
           let url: string | null = null;
           for (const key of candidates) {
             try {
               const cdn = resolveTemplateCdnUrl(key);
-              if (await probeCdn(cdn)) { url = cdn; break; }
+              url = cdn; break;
             } catch {}
-            if (!url && bucket) {
-              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 2592000 }); break; } catch {}
+          }
+          if (!url && bucket) {
+            const key = candidates.find(Boolean) as string | undefined;
+            if (key) {
+              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 2592000 }); } catch {}
             }
           }
           out.thumb_400_url = url || null;
         }
+
         // thumb_600 (with legacy path fallback)
         {
           const candidates = [
-            row.thumbnail_600_path,
             `users/admin-templates/${row.id}/thumb_600.webp`,
+            row.thumbnail_600_path,
             `templates/${row.id}/thumb_600.webp`,
           ].filter(Boolean) as string[];
           let url: string | null = null;
           for (const key of candidates) {
             try {
               const cdn = resolveTemplateCdnUrl(key);
-              if (await probeCdn(cdn)) { url = cdn; break; }
+              url = cdn; break;
             } catch {}
-            if (!url && bucket) {
-              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 2592000 }); break; } catch {}
+          }
+          if (!url && bucket) {
+            const key = candidates.find(Boolean) as string | undefined;
+            if (key) {
+              try { url = await getSignedUrl({ bucket, key, expiresInSeconds: 2592000 }); } catch {}
             }
           }
           out.thumb_600_url = url || null;
         }
+
         out.thumbnail_url = out.thumb_400_url || out.thumb_600_url || out.preview_url || null;
         return out;
       })

@@ -11,7 +11,7 @@ export function resolveTemplateCdnUrl(path: string): string {
     throw new Error("CDN access denied: original images are forbidden");
   }
 
-  const base = process.env.B2_CDN_BASE;
+  const base = process.env.B2_CDN_BASE || process.env.NEXT_PUBLIC_B2_CDN_BASE || (process as any).env?.b2_cdn_base || (process as any).env?.NEXT_PUBLIC_b2_cdn_base;
   if (!base) {
     throw new Error("B2_CDN_BASE not configured");
   }
